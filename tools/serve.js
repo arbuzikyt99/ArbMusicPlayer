@@ -19,7 +19,19 @@ http.createServer((req, res) => {
   if (!file.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
 
   fs.stat(file, (err, stat) => {
-    if (err || !stat.isFile()) { res.writeHead(404); res.end('not found'); return; }
+    if (err || (!stat.isFile() && !(stat.isDirectory() && !p.endsWith('/')))) {
+      res.writeHead(404); res.end('not found'); return;
+    }
+    if (stat.isDirectory()) {
+      // отдаём index.html из папки
+      const idx = path.join(file, 'index.html');
+      fs.readFile(idx, (e2, d2) => {
+        if (e2) { res.writeHead(404); res.end('not found'); return; }
+        res.writeHead(200, { 'Content-Type': MIME['.html'] });
+        res.end(d2);
+      });
+      return;
+    }
     const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
     const range = req.headers.range;
     if (range) {

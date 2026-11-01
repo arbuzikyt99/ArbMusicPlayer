@@ -140,42 +140,22 @@ function afterScan() {
   if (n) toast(`Найдено ${n} ${plural(n, 'трек', 'трека', 'треков')}`);
 }
 
-/* web fallback: pick folder */
+/* web fallback: pick folder (desktop) or files (iOS) */
 function pickFolder() {
-  $('#dirpick').click();
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  (ios ? $('#filepick') : $('#dirpick')).click();
 }
 function onDirPicked(e) {
-  const files = [...e.target.files];
-  const tracks = [], lrcMap = {};
-  for (const f of files) {
-    const rel = f.webkitRelativePath || f.name;
-    if (rel.split('/').pop().startsWith('.')) continue;
-    if (AUDIO_EXT.test(f.name)) {
-      const { artist, title } = parseName(f.name);
-      tracks.push({ id: `${f.name}_${f.size}`, file: f, name: f.name, title, artist, album: '', dur: 0, ext: (f.name.match(/\.(\w+)$/i) || [, ''])[1].toLowerCase() });
-    } else if (/\.(lrc|txt)$/i.test(f.name)) {
-      const base = f.name.replace(/\.(lrc|txt)$/i, '').toLowerCase();
-      lrcMap[base] = f;
-    }
-  }
-  if (!tracks.length) { toast('В папке нет аудиофайлов'); return; }
-  sortByDefault(tracks);
-  state.tracks = tracks;
-  state.lrcMap = lrcMap;
-  afterScan();
-  readLrcFiles();
-}
-async function readLrcFiles() {
-  for (const [base, f] of Object.entries(state.lrcMap)) {
-    try { state.lrcMap[base] = await f.text(); } catch (_) { /* ignore */ }
-  }
+  importFiles(e.target.files);
+  e.target.value = '';
 }
 
 /* lazy duration probing on web */
 const probeQueue = [];
 let probing = 0;
 function probeDuration(track) {
-  if (!track.file || track.dur) return;
+  if ((!track.file && !track.url) || track.dur) return;
   probeQueue.push(track);
   pumpProbe();
 }
@@ -191,10 +171,113 @@ function pumpProbe() {
       probing--;
       pumpProbe();
       $$(`.rdur[data-id="${CSS.escape(t.id)}"]`).forEach(el => el.textContent = fmt(t.dur));
+      // сохранить длительность в базу
+      if (t.dur && !isNative) {
+        openDB().then(db => new Promise(res => {
+          const st = db.transaction('tracks').objectStore('tracks');
+          const gq = st.get(t.id);
+          gq.onsuccess = () => {
+            if (gq.result) { gq.result.dur = t.dur; st.put(gq.result); }
+            res();
+          };
+          gq.onerror = res;
+        })).catch(() => {});
+      }
     };
     a.onloadedmetadata = done;
     a.onerror = () => { probing--; pumpProbe(); };
-    a.src = URL.createObjectURL(t.file);
+    a.src = t.file ? URL.createObjectURL(t.file) : t.url;
+  }
+}
+
+/* ---------- IndexedDB: постоянная библиотека (web / PWA) ---------- */
+let idb = null;
+function openDB() {
+  if (idb) return Promise.resolve(idb);
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open('arbmusic', 1);
+    rq.onupgradeneeded = () => {
+      rq.result.createObjectStore('tracks', { keyPath: 'id' });
+    };
+    rq.onsuccess = () => { idb = rq.result; res(idb); };
+    rq.onerror = () => rej(rq.error);
+  });
+}
+function idbPut(rec) {
+  return openDB().then(db => new Promise((res, rej) => {
+    const tx = db.transaction('tracks', 'readwrite');
+    tx.objectStore('tracks').put(rec);
+    tx.oncomplete = res;
+    tx.onerror = () => rej(tx.error);
+  }));
+}
+function idbAll() {
+  return openDB().then(db => new Promise((res, rej) => {
+    const rq = db.transaction('tracks').objectStore('tracks').getAll();
+    rq.onsuccess = () => res(rq.result || []);
+    rq.onerror = () => rej(rq.error);
+  }));
+}
+function idbDel(id) {
+  return openDB().then(db => new Promise((res, rej) => {
+    const tx = db.transaction('tracks', 'readwrite');
+    tx.objectStore('tracks').delete(id);
+    tx.oncomplete = res;
+    tx.onerror = () => rej(tx.error);
+  }));
+}
+
+async function importFiles(fileList) {
+  const arr = [...fileList];
+  const audio = [], texts = {};
+  for (const f of arr) {
+    if (/\.(lrc|txt)$/i.test(f.name)) {
+      const base = f.name.replace(/\.(lrc|txt)$/i, '').toLowerCase();
+      try { texts[base] = await f.text(); } catch (_) { /* ignore */ }
+    } else if (AUDIO_EXT.test(f.name)) {
+      audio.push(f);
+    }
+  }
+  if (!audio.length) { toast('Аудиофайлы не найдены'); return; }
+  for (const f of audio) {
+    const base = f.name.replace(/\.[^.]+$/, '').toLowerCase();
+    const { artist, title } = parseName(f.name);
+    await idbPut({
+      id: `${f.name}_${f.size}`, name: f.name, title, artist, album: '',
+      dur: 0, ext: (f.name.match(/\.(\w+)$/i) || [, ''])[1].toLowerCase(),
+      blob: f, lrc: texts[base] || null,
+    });
+  }
+  await loadLibrary();
+  let extra = '';
+  try {
+    if (navigator.storage && navigator.storage.estimate) {
+      const est = await navigator.storage.estimate();
+      extra = ` · ${(est.usage / 1048576).toFixed(0)} МБ`;
+    }
+  } catch (_) { /* ignore */ }
+  toast(`Сохранено: ${audio.length} ${plural(audio.length, 'трек', 'трека', 'треков')}${extra}`);
+}
+
+async function loadLibrary() {
+  if (!('indexedDB' in window)) return false;
+  try {
+    const recs = await idbAll();
+    state.tracks.forEach(t => { if (t.url) URL.revokeObjectURL(t.url); });
+    state.lrcMap = {};
+    state.tracks = recs.map(r => ({
+      id: r.id, name: r.name, title: r.title, artist: r.artist, album: r.album || '',
+      dur: r.dur || 0, ext: r.ext || '', url: URL.createObjectURL(r.blob), lrc: r.lrc || null,
+    }));
+    for (const t of state.tracks) {
+      if (t.lrc && t.name) state.lrcMap[t.name.replace(/\.[^.]+$/, '').toLowerCase()] = t.lrc;
+    }
+    sortByDefault(state.tracks);
+    afterScan();
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
   }
 }
 
@@ -208,6 +291,9 @@ function rowHTML(t, i) {
       <div class="rartist">${esc(t.artist)}</div>
     </div>
     <span class="rdur" data-id="${esc(t.id)}">${t.dur ? fmt(t.dur) : (t.file ? '·:··' : '')}</span>
+    <button class="rdel" data-del="${esc(t.id)}" aria-label="Удалить">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
     <button class="rheart ${fav ? 'fav' : ''}" data-id="${esc(t.id)}" aria-label="В избранное">
       <svg viewBox="0 0 24 24" fill="none"><path d="M12 20.7C7 16.5 3.5 13.3 3.5 9.7 3.5 7 5.6 5 8.2 5c1.5 0 3 .7 3.8 2 .8-1.3 2.3-2 3.8-2 2.6 0 4.7 2 4.7 4.7 0 3.6-3.5 6.8-8.5 11z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
     </button>
@@ -618,6 +704,7 @@ function wire() {
   });
   $('#btn-pick-folder').addEventListener('click', pickFolder);
   $('#dirpick').addEventListener('change', onDirPicked);
+  $('#filepick').addEventListener('change', onDirPicked);
 
   // list view
   $('#btn-list-shuffle').addEventListener('click', () => {
@@ -635,6 +722,18 @@ function wire() {
   // row clicks (delegation)
   const rowHandler = (container, getList) => {
     container.addEventListener('click', e => {
+      const del = e.target.closest('.rdel');
+      if (del) {
+        e.stopPropagation();
+        const id = del.dataset.del;
+        idbDel(id).then(() => {
+          const wasCurrent = current() && current().id === id;
+          if (wasCurrent) { audio.pause(); audio.removeAttribute('src'); }
+          state.favs.delete(id); saveFavs();
+          loadLibrary().then(() => toast('Трек удалён'));
+        });
+        return;
+      }
       const heart = e.target.closest('.rheart');
       const row = e.target.closest('.row');
       if (!row) return;
@@ -748,14 +847,23 @@ async function initTestServer() {
 
 /* ---------- init ---------- */
 async function init() {
+  if (!isNative) document.body.classList.add('web');
   wire();
   updateShuffleUI();
   updateRepeatUI();
   updatePlayUI();
   refreshFavUI();
   renderHome();
-  if (isNative) scanNative();
-  else initTestServer();
+  if (isNative) {
+    scanNative();
+  } else {
+    // service worker — оффлайн-режим (только на http/https, не в Electron file://)
+    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+    const testOk = await initTestServer();
+    if (!testOk) await loadLibrary();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);

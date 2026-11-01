@@ -166,6 +166,12 @@ section.view.active { opacity: 1; pointer-events: auto; transform: none; z-index
 .rheart.fav { color: var(--a2); }
 .rheart.fav svg path { fill: currentColor; }
 
+/* delete track button — только в веб-режиме (там треки хранятся в базе) */
+.rdel { width: 30px; height: 34px; display: none; place-items: center; color: var(--dim); flex-shrink: 0; border-radius: 50%; }
+.rdel svg { width: 15px; height: 15px; }
+.rdel:hover { color: var(--a2); }
+body.web .rdel { display: grid; }
+
 /* equalizer on playing row */
 .eq { position: absolute; inset: 0; display: none; align-items: flex-end; justify-content: center; gap: 3px; padding-bottom: 30%; background: rgba(7, 7, 12, .45); }
 .row.playing .eq, .mini.playing .eq { display: flex; }
