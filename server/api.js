@@ -419,10 +419,10 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    /* --- админ: удалить трек из общей базы --- */
+    /* --- админ и автор: удалить трек из общей базы --- */
     if (p === '/api/delete-track' && req.method === 'POST') {
       const me = checkToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
-      if (!me || !me.admin) return json(res, 403, { error: 'Только для админа' });
+      if (!me) return json(res, 401, { error: 'Войди в аккаунт' });
       if (!GH_TOKEN) return json(res, 500, { error: 'Сервер не подключён к GitHub' });
       const body = JSON.parse((await readBody(req, 1e6)).toString('utf8') || '{}');
       const id = String(body.id || '');
