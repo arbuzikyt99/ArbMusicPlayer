@@ -503,6 +503,12 @@ body.web .rdel { display: grid; }
 }
 .file-pick svg { width: 20px; height: 20px; color: var(--a1); flex-shrink: 0; }
 .file-pick.filled { border-style: solid; border-color: rgba(139, 92, 246, .5); color: var(--txt); }
+.cover-preview {
+  width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0; overflow: hidden;
+  background: rgba(139, 92, 246, .15); display: grid; place-items: center;
+}
+.cover-preview svg { width: 19px; height: 19px; color: var(--a1); }
+.cover-preview img { width: 100%; height: 100%; object-fit: cover; }
 
 /* ============================================================
    ADMIN

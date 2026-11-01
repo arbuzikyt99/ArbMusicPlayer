@@ -293,12 +293,19 @@
         <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 10h16M4 14h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         <span id="upload-lrc-name">Текст песни .lrc (необязательно)</span>
       </button>
+      <button class="file-pick" id="upload-cover-btn">
+        <span class="cover-preview" id="upload-cover-preview">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="3.5" width="17" height="17" rx="4" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="9" r="1.6" fill="currentColor"/><path d="M4.5 17l4.5-4.5 3 3 3.5-3.5 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span id="upload-cover-name">Обложка трека (необязательно)</span>
+      </button>
       <input id="upload-title" class="field" placeholder="Название трека" maxlength="60">
       <input id="upload-artist" class="field" placeholder="Исполнитель" maxlength="40">
       <div class="form-err hidden" id="upload-err"></div>
       <button class="btn-grad wide" id="upload-submit">Отправить на модерацию</button>
       <input type="file" id="upload-audio" accept=".mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.wma,audio/*" hidden>
       <input type="file" id="upload-lrc" accept=".lrc,.txt" hidden>
+      <input type="file" id="upload-cover" accept=".jpg,.jpeg,.png,.webp,image/*" hidden>
     </div>
   </div>
 

@@ -171,15 +171,28 @@ const server = http.createServer(async (req, res) => {
       if (!['mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'oga', 'opus', 'wma'].includes(ext)) {
         return json(res, 400, { error: 'Это не аудиофайл' });
       }
+      // обложка (необязательно)
+      let coverExt = null;
+      const cover = parts.cover;
+      if (cover && cover.data && cover.data.length) {
+        coverExt = (cover.filename.match(/\.(\w+)$/i) || [, ''])[1].toLowerCase();
+        if (!['jpg', 'jpeg', 'png', 'webp'].includes(coverExt)) {
+          return json(res, 400, { error: 'Обложка: только jpg/png/webp' });
+        }
+        if (cover.data.length > 8 * 1024 * 1024) {
+          return json(res, 400, { error: 'Обложка больше 8 МБ' });
+        }
+      }
       const id = crypto.randomBytes(8).toString('hex');
       fs.writeFileSync(path.join(DATA, 'pending', id + '.' + ext), file.data);
+      if (coverExt) fs.writeFileSync(path.join(DATA, 'pending', id + '.cover.' + coverExt), cover.data);
       let lrc = null;
       if (parts.lrc && parts.lrc.data && parts.lrc.data.length) {
         lrc = parts.lrc.data.toString('utf8').slice(0, 200000);
       }
       const q = queue();
       q.items.unshift({
-        id, ext, by: me.name, at: Date.now(),
+        id, ext, coverExt, by: me.name, at: Date.now(),
         title: safeName(parts.title) || 'Без названия',
         artist: safeName(parts.artist) || me.name,
         size: file.data.length, lrc,
@@ -190,15 +203,23 @@ const server = http.createServer(async (req, res) => {
 
     /* --- просмотр файла на модерации (для прослушивания админом) --- */
     if (p.startsWith('/audio/') && req.method === 'GET') {
-      const id = p.slice(7).replace(/[^a-f0-9]/g, '').slice(0, 16);
+      const rest = p.slice(7);
+      const slash = rest.indexOf('/');
+      const id = (slash === -1 ? rest : rest.slice(0, slash)).replace(/[^a-f0-9]/g, '').slice(0, 16);
       const q = queue();
       const item = q.items.find(i => i.id === id);
       if (!item) return json(res, 404, { error: 'not found' });
-      const file = path.join(DATA, 'pending', id + '.' + item.ext);
+      const isCover = slash !== -1 && rest.slice(slash + 1) === 'cover';
+      const file = isCover
+        ? path.join(DATA, 'pending', id + '.cover.' + item.coverExt)
+        : path.join(DATA, 'pending', id + '.' + item.ext);
       if (!fs.existsSync(file)) return json(res, 404, { error: 'not found' });
       const data = fs.readFileSync(file);
+      const mime = isCover
+        ? (item.coverExt === 'png' ? 'image/png' : item.coverExt === 'webp' ? 'image/webp' : 'image/jpeg')
+        : 'audio/' + (item.ext === 'ogg' ? 'ogg' : item.ext);
       res.writeHead(200, {
-        'Content-Type': 'audio/' + (item.ext === 'ogg' ? 'ogg' : item.ext),
+        'Content-Type': mime,
         'Content-Length': data.length,
         'Access-Control-Allow-Origin': '*',
         'Accept-Ranges': 'none',
@@ -222,17 +243,24 @@ const server = http.createServer(async (req, res) => {
       const idx = q.items.findIndex(i => i.id === body.id);
       if (idx === -1) return json(res, 404, { error: 'Трек не найден в очереди' });
       const item = q.items[idx];
+      const removeFiles = () => {
+        try {
+          for (const f of fs.readdirSync(path.join(DATA, 'pending'))) {
+            if (f.startsWith(item.id + '.')) fs.unlinkSync(path.join(DATA, 'pending', f));
+          }
+        } catch (_) {}
+      };
       if (body.action === 'reject') {
         q.items.splice(idx, 1);
         writeJSON('queue.json', q);
-        try { fs.unlinkSync(path.join(DATA, 'pending', item.id + '.' + item.ext)); } catch (_) {}
+        removeFiles();
         return json(res, 200, { ok: true, action: 'reject' });
       }
       if (body.action === 'approve') {
-        // клиент уже закоммитил файл в репозиторий и обновил каталог
+        // клиент уже закоммитил файл и обложку в репозиторий и обновил каталог
         q.items.splice(idx, 1);
         writeJSON('queue.json', q);
-        try { fs.unlinkSync(path.join(DATA, 'pending', item.id + '.' + item.ext)); } catch (_) {}
+        removeFiles();
         return json(res, 200, { ok: true, action: 'approve' });
       }
       return json(res, 400, { error: 'bad action' });

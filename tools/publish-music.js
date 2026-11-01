@@ -29,6 +29,13 @@ function parseName(n) {
   return m ? { artist: m[1].trim(), title: m[2].trim() } : { artist: 'Неизвестный исполнитель', title: b.trim() };
 }
 
+/* сохраняем обложки, добавленные через модерацию */
+let prevCovers = {};
+try {
+  const prev = JSON.parse(fs.readFileSync(path.join(ROOT, 'catalog.json'), 'utf8'));
+  for (const t of (prev.tracks || [])) if (t.cover) prevCovers[t.file] = t.cover;
+} catch (_) { /* нет старого каталога */ }
+
 const files = fs.readdirSync(MUSIC).filter(f => !f.startsWith('.'));
 const entries = [];
 for (const f of files.sort()) {
@@ -40,7 +47,7 @@ for (const f of files.sort()) {
     const le = e.toLowerCase();
     if (le === base + '.lrc' || le === base + '.txt') { lrc = e; break; }
   }
-  entries.push({ id: 'cloud_' + f, file: f, title, artist, lrc });
+  entries.push({ id: 'cloud_' + f, file: f, title, artist, lrc, cover: prevCovers[f] || null });
 }
 
 fs.writeFileSync(path.join(ROOT, 'catalog.json'),

@@ -68,8 +68,15 @@ function gradFor(track) {
 
 const NOTE_SVG = '<svg viewBox="0 0 24 24" fill="none"><path d="M9 18.5V6.8l9-2.3v11" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6.6" cy="18.5" r="2.4" fill="#fff"/><circle cx="15.6" cy="15.5" r="2.4" fill="#fff"/></svg>';
 
+/* обложка облачного трека (файл covers/ в репозитории) */
+function coverUrl(t) {
+  return t && t.cover ? MUSIC_BASE + encodeURIComponent(t.cover) : null;
+}
+
 function thumbHTML(track, cls) {
-  return `<div class="thumb ${cls || ''}" style="background:${gradFor(track)}">${NOTE_SVG}</div>`;
+  const cov = coverUrl(track);
+  const img = cov ? `<img src="${esc(cov)}" alt="" loading="lazy">` : '';
+  return `<div class="thumb ${cls || ''}" style="background:${gradFor(track)}">${img}${NOTE_SVG}</div>`;
 }
 
 function trackUrl(t) {
@@ -322,7 +329,7 @@ async function loadCatalog() {
   state.cloudTracks = data.tracks.map(t => ({
     id: 'cloud_' + t.file, name: t.file, title: t.title, artist: t.artist || 'Неизвестный исполнитель', album: '',
     dur: 0, ext: (t.file.match(/\.(\w+)$/i) || [, ''])[1].toLowerCase(),
-    cloud: true, lrcFile: t.lrc || null,
+    cloud: true, lrcFile: t.lrc || null, cover: t.cover || null,
     url: MUSIC_BASE + encodeURIComponent(t.file),
   }));
   mergeLibrary();
@@ -503,15 +510,19 @@ function wireAuth() {
 }
 
 /* ---------- загрузка трека на модерацию ---------- */
-let upAudio = null, upLrc = null;
+let upAudio = null, upLrc = null, upCover = null;
 function wireUpload() {
   $('#btn-upload-track').addEventListener('click', () => {
     if (!session()) { openModal('modal-auth'); return; }
-    upAudio = upLrc = null;
+    upAudio = upLrc = upCover = null;
     $('#upload-audio-name').textContent = 'Выбрать аудиофайл';
     $('#upload-lrc-name').textContent = 'Текст песни .lrc (необязательно)';
+    $('#upload-cover-name').textContent = 'Обложка трека (необязательно)';
     $('#upload-audio-btn').classList.remove('filled');
     $('#upload-lrc-btn').classList.remove('filled');
+    $('#upload-cover-btn').classList.remove('filled');
+    $('#upload-cover-preview').innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="3.5" width="17" height="17" rx="4" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="9" r="1.6" fill="currentColor"/><path d="M4.5 17l4.5-4.5 3 3 3.5-3.5 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     $('#upload-title').value = '';
     $('#upload-artist').value = '';
     $('#upload-err').classList.add('hidden');
@@ -534,6 +545,22 @@ function wireUpload() {
     $('#upload-lrc-name').textContent = upLrc ? upLrc.name : 'Текст песни .lrc (необязательно)';
     $('#upload-lrc-btn').classList.toggle('filled', !!upLrc);
   });
+  $('#upload-cover-btn').addEventListener('click', () => $('#upload-cover').click());
+  $('#upload-cover').addEventListener('change', e => {
+    upCover = e.target.files[0] || null;
+    $('#upload-cover-name').textContent = upCover ? upCover.name : 'Обложка трека (необязательно)';
+    $('#upload-cover-btn').classList.toggle('filled', !!upCover);
+    const pv = $('#upload-cover-preview');
+    if (upCover) {
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(upCover);
+      pv.innerHTML = '';
+      pv.appendChild(img);
+    } else {
+      pv.innerHTML =
+        '<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="3.5" width="17" height="17" rx="4" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="9" r="1.6" fill="currentColor"/><path d="M4.5 17l4.5-4.5 3 3 3.5-3.5 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    }
+  });
   $('#upload-submit').addEventListener('click', async () => {
     const err = $('#upload-err');
     err.classList.add('hidden');
@@ -542,9 +569,10 @@ function wireUpload() {
     const btn = $('#upload-submit');
     btn.disabled = true; btn.textContent = 'Загружаю…';
     try {
-      const fd = new FormData();
-      fd.append('file', upAudio, upAudio.name);
-      if (upLrc) fd.append('lrc', upLrc, upLrc.name);
+    const fd = new FormData();
+    fd.append('file', upAudio, upAudio.name);
+    if (upLrc) fd.append('lrc', upLrc, upLrc.name);
+    if (upCover) fd.append('cover', upCover, upCover.name);
       fd.append('title', $('#upload-title').value.trim() || parseName(upAudio.name).title);
       fd.append('artist', $('#upload-artist').value.trim() || session().name);
       await api('/api/upload', { body: fd });
@@ -589,6 +617,11 @@ async function approveTrack(item) {
   toast('Публикую: ' + item.title + '…');
   const fileName = `${item.artist} - ${item.title}.${item.ext}`.replace(/[\\/:*?"<>|]/g, '_').trim();
   const files = [{ path: 'music/' + fileName, content: await (await fetch(API_URL + '/audio/' + item.id)).arrayBuffer() }];
+  let coverRel = null;
+  if (item.coverExt) {
+    coverRel = 'covers/' + fileName.replace(/\.[^.]+$/, '') + '.' + item.coverExt;
+    files.push({ path: 'music/' + coverRel, content: await (await fetch(API_URL + '/audio/' + item.id + '/cover')).arrayBuffer() });
+  }
   if (item.lrc) files.push({ path: 'music/' + fileName.replace(/\.[^.]+$/, '.lrc'), content: item.lrc });
 
   const treeItems = [];
@@ -611,7 +644,11 @@ async function approveTrack(item) {
     cat = b64ToJSON(cur.content);
   } catch (_) { /* нет каталога — создадим */ }
   cat.tracks = cat.tracks || [];
-  cat.tracks.push({ id: 'cloud_' + fileName, file: fileName, title: item.title, artist: item.artist, lrc: item.lrc ? fileName.replace(/\.[^.]+$/, '.lrc') : null });
+  cat.tracks.push({
+    id: 'cloud_' + fileName, file: fileName, title: item.title, artist: item.artist,
+    lrc: item.lrc ? fileName.replace(/\.[^.]+$/, '.lrc') : null,
+    cover: coverRel,
+  });
   cat.updated = new Date().toISOString();
   const putBody = { message: 'catalog: + ' + fileName, content: jsonToB64(cat) };
   if (catSha) putBody.sha = catSha;
@@ -622,8 +659,9 @@ async function approveTrack(item) {
 
 function adminItemHTML(t) {
   const mb = (t.size / 1048576).toFixed(1);
+  const cov = t.coverExt ? `<img src="${esc(API_URL + '/audio/' + t.id + '/cover')}" alt="">` : '';
   return `<div class="admin-item" data-id="${esc(t.id)}">
-    <div class="thumb" style="background:${gradFor({ id: t.id })}">${NOTE_SVG}</div>
+    <div class="thumb" style="background:${gradFor({ id: t.id })}">${cov}${NOTE_SVG}</div>
     <div class="ameta"><b>${esc(t.title)}</b><span>${esc(t.artist)} · от ${esc(t.by)} · ${mb} МБ</span></div>
     <button class="abtn play" title="Послушать"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.4v13.2c0 .8.9 1.3 1.6.9l10-6.6a1.06 1.06 0 0 0 0-1.8l-10-6.6c-.7-.5-1.6 0-1.6.9z"/></svg></button>
     <button class="abtn ok" title="Одобрить"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -816,6 +854,14 @@ function updateRepeatUI() {
 
 /* ---------- art ---------- */
 async function loadArt(t) {
+  const cov = coverUrl(t);
+  if (cov) {
+    // обложка из каталога — просто подставляем картинку
+    const img = new Image();
+    img.onload = () => applyArt(t, cov);
+    img.src = cov;
+    return;
+  }
   if (!isNative) return;
   if (state.artCache.has(t.id)) return applyArt(t, state.artCache.get(t.id));
   try {
@@ -823,11 +869,11 @@ async function loadArt(t) {
     if (r && r.data) { state.artCache.set(t.id, r.data); applyArt(t, r.data); }
   } catch (_) { /* no art */ }
 }
-function applyArt(t, dataUrl) {
+function applyArt(t, src) {
   const cur = current();
   if (!cur || cur.id !== t.id) return;
   const img = document.createElement('img');
-  img.src = dataUrl;
+  img.src = src;
   img.onload = () => {
     const pa = $('#p-art');
     if (current() && current().id === t.id) {
@@ -839,7 +885,7 @@ function applyArt(t, dataUrl) {
     const ma = $('#mini-art');
     if (ma && current().id === t.id) {
       ma.querySelector('img')?.remove();
-      const mi = document.createElement('img'); mi.src = dataUrl; ma.appendChild(mi);
+      const mi = document.createElement('img'); mi.src = src; ma.appendChild(mi);
     }
   };
 }
@@ -1018,7 +1064,7 @@ audio.addEventListener('error', () => {
 function updateMediaSession(t) {
   if (!('mediaSession' in navigator)) return;
   try {
-    const art = state.artCache.get(t.id);
+    const art = state.artCache.get(t.id) || coverUrl(t);
     navigator.mediaSession.metadata = new MediaMetadata({
       title: t.title, artist: t.artist, album: t.album || 'ArbMusic',
       artwork: art ? [{ src: art, sizes: '512x512', type: 'image/jpeg' }] : [],

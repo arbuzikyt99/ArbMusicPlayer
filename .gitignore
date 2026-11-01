@@ -14,7 +14,7 @@ ios/DerivedData/
 test-music/
 ArbMusic.apk
 dist/
-electron/dist-win/
+dist-win/
 
 # локальная сборка сайта
 .zcode-site/
