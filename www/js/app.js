@@ -99,8 +99,6 @@ function toggleFav(id) {
   refreshFavUI();
 }
 function refreshFavUI() {
-  const n = state.favs.size;
-  $('#favs-sub').textContent = n ? `${n} ${plural(n, 'трек', 'трека', 'треков')}` : 'сохранённые треки';
   const cur = current();
   const pf = $('#btn-fav');
   pf.classList.toggle('fav', !!(cur && state.favs.has(cur.id)));
