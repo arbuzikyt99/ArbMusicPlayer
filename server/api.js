@@ -367,5 +367,18 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`arbmusic-api on 0.0.0.0:${PORT}, data: ${DATA}`);
-  restoreFromMirror();
+  restoreFromMirror().then(() => {
+    // админ-аккаунт всегда существует, даже после перезапуска
+    const ADMIN_PASS = process.env.ADMIN_PASS || '';
+    if (ADMIN_PASS) {
+      const db = users();
+      const key = ADMIN_USER.toLowerCase();
+      if (!db[key]) {
+        const salt = crypto.randomBytes(16).toString('hex');
+        db[key] = { name: ADMIN_USER, salt, hash: hashPass(ADMIN_PASS, salt), created: Date.now() };
+        writeJSON('users.json', db);
+        console.log('admin account restored:', ADMIN_USER);
+      }
+    }
+  });
 });

@@ -94,6 +94,12 @@ function saveFavs() {
   localStorage.setItem('arbmusic.favs', JSON.stringify([...state.favs]));
 }
 function toggleFav(id) {
+  if (!session()) {
+    toast('Войди, чтобы сохранять треки');
+    $('#auth-err').classList.add('hidden');
+    openModal('modal-auth');
+    return;
+  }
   if (state.favs.has(id)) state.favs.delete(id); else state.favs.add(id);
   saveFavs();
   refreshFavUI();
@@ -229,6 +235,15 @@ function renderHome() {
 function renderListView() {
   const isFav = state.listKind === 'favs';
   $('#list-title').textContent = isFav ? 'Моя музыка' : 'Микс';
+  if (isFav && !session()) {
+    renderRows($('#list-tracks'), [], null);
+    $('#empty-list').classList.add('show');
+    $('#empty-list h3').textContent = 'Войди в аккаунт';
+    $('#empty-list p').textContent = 'Жми сердечко у трека — сохранённое появится здесь';
+    return;
+  }
+  $('#empty-list h3').textContent = 'Здесь пока пусто';
+  $('#empty-list p').textContent = 'Сохрани треки — жми сердечко у трека или в плеере';
   const list = isFav ? state.tracks.filter(t => state.favs.has(t.id)) : state.tracks;
   renderRows($('#list-tracks'), list, $('#empty-list'));
 }
@@ -306,6 +321,8 @@ function refreshProfile() {
     $('#profile-admin-badge').classList.toggle('hidden', !s.admin);
     $('#btn-admin').classList.toggle('hidden', !s.admin);
   }
+  // «Моя музыка» зависит от входа
+  if (state.view === 'list' && state.listKind === 'favs') renderListView();
 }
 
 /* ---------- модалки ---------- */
