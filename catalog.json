@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-01T15:02:47.827Z",
+  "updated": "2026-11-01T15:02:53.020Z",
   "tracks": [
     {
       "id": "cloud_Арбузик - Мадам.mp3",
@@ -13,14 +13,6 @@
       "file": "4k feat. ChipaChip - В белом платье 2.mp3",
       "title": "В белом платье 2",
       "artist": "4k feat. ChipaChip",
-      "lrc": null,
-      "cover": null
-    },
-    {
-      "id": "cloud_DeleteMe - Del Test.mp3",
-      "file": "DeleteMe - Del Test.mp3",
-      "title": "Del Test",
-      "artist": "DeleteMe",
       "lrc": null,
       "cover": null
     }
