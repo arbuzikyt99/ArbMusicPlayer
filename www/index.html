@@ -62,8 +62,7 @@
         <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M10 15.5v-5l4-1v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="15.5" r="1.4" fill="currentColor"/><circle cx="13" cy="14.5" r="1.4" fill="currentColor"/></svg>
       </div>
       <h3>Треков пока нет</h3>
-      <p id="empty-home-text">Нажми «Обновить», чтобы найти музыку на устройстве</p>
-      <button class="btn-grad" id="btn-pick-folder">Выбрать папку с музыкой</button>
+      <p id="empty-home-text">Треки появятся, когда админ опубликует их в общей базе</p>
     </div>
   </section>
 
@@ -245,23 +244,6 @@
     </div>
   </div>
 
-  <!-- ============ PERMISSION OVERLAY ============ -->
-  <div id="perm" class="overlay hidden">
-    <div class="perm-card">
-      <div class="empty-art big">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3l8 4v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7l8-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </div>
-      <h3>Нужен доступ к файлам</h3>
-      <p>Чтобы ArbMusic нашёл твою музыку, разреши приложению доступ ко всем файлам в настройках и вернись обратно.</p>
-      <button class="btn-grad" id="btn-open-perm">Открыть настройки</button>
-      <button class="btn-ghost" id="btn-perm-later">Позже</button>
-    </div>
-  </div>
-
-  <div id="toast" class="toast hidden"></div>
-
-  <!-- ============ AUTH MODAL ============ -->
-  <div id="modal-auth" class="modal">
     <div class="modal-card">
       <button class="modal-x" data-close="modal-auth" aria-label="Закрыть">
         <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -337,8 +319,6 @@
     </div>
   </div>
 
-  <input type="file" id="dirpick" webkitdirectory multiple hidden>
-  <input type="file" id="filepick" multiple hidden accept=".mp3,.m4a,.aac,.wav,.flac,.ogg,.oga,.opus,.wma,.lrc,.txt,audio/*">
 
   <script src="js/app.js"></script>
 </body>

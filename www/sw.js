@@ -1,6 +1,7 @@
-/* ArbMusic service worker — приложение работает даже без интернета */
+/* ArbMusic service worker — оффлайн-запас приложения.
+   Стратегия: сначала сеть (всегда свежая версия), кэш — только когда сети нет. */
 'use strict';
-const CACHE = 'arbmusic-v1';
+const CACHE = 'arbmusic-v2';
 const SHELL = [
   './index.html',
   './css/style.css',
@@ -28,29 +29,35 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== location.origin) return;          // сторонние — мимо
+  if (url.origin !== location.origin) return;           // сторонние — мимо
   if (req.headers.has('range')) return;                 // media range — мимо
-  if (!url.pathname.startsWith(new URL('./', location.href).pathname)) return;
 
-  // навигация: сразу из кэша, обновляем в фоне
+  // навигация: сначала сеть
   if (req.mode === 'navigate') {
     e.respondWith(
-      caches.match('./index.html').then((hit) => hit || fetch(req))
+      fetch(req)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const cp = res.clone();
+            caches.open(CACHE).then((c) => c.put('./index.html', cp));
+          }
+          return res;
+        })
+        .catch(() => caches.match('./index.html'))
     );
     return;
   }
 
-  // остальные ресурсы: stale-while-revalidate
+  // прочие ресурсы: сначала сеть, при ошибке — кэш
   e.respondWith(
-    caches.match(req).then((hit) => {
-      const fresh = fetch(req).then((res) => {
+    fetch(req)
+      .then((res) => {
         if (res && res.status === 200) {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy));
+          const cp = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, cp));
         }
         return res;
-      }).catch(() => hit);
-      return hit || fresh;
-    })
+      })
+      .catch(() => caches.match(req))
   );
 });

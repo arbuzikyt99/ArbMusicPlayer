@@ -115,36 +115,16 @@ function parseName(name) {
   return { artist: 'Неизвестный исполнитель', title: base.trim() };
 }
 
-async function scanNative() {
-  const btn = $('#btn-rescan');
-  btn.classList.add('spin');
-  try {
-    const res = await Native.scan();
-    if (res.status === 'needsAllFiles') { showPerm(true); return; }
-    if (res.status === 'denied') { toast('Нет доступа к файлам'); return; }
-    state.deviceTracks = (res.tracks || []).map(t => ({
-      id: t.path, path: t.path, title: t.title || t.name, artist: t.artist || 'Неизвестный исполнитель',
-      album: t.album || '', dur: t.duration || 0, ext: t.ext || '', name: t.name || '',
-    }));
-    sortByDefault(state.deviceTracks);
-    mergeLibrary();
-  } catch (e) {
-    console.error(e); toast('Ошибка сканирования');
-  } finally { btn.classList.remove('spin'); }
-}
-
 function sortByDefault(arr) {
   arr.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'ru') || (a.title || '').localeCompare(b.title || '', 'ru'));
 }
 
-/* объединяем: общий каталог (сервер) + треки устройства + локальная база */
+/* библиотека = общий каталог сервера. Никаких локальных хранений. */
 function mergeLibrary() {
   const seen = new Set();
   const out = [];
   const push = t => { if (t && !seen.has(t.id)) { out.push(t); seen.add(t.id); } };
   (state.cloudTracks || []).forEach(push);
-  (state.deviceTracks || []).forEach(push);
-  (state.localTracks || []).forEach(push);
   state.tracks = out;
   sortByDefault(state.tracks);
   refreshUI();
@@ -154,28 +134,17 @@ function refreshUI() {
   const n = state.tracks.length;
   $('#mix-sub').textContent = n ? `случайный порядок · ${n} ${plural(n, 'трек', 'трека', 'треков')}` : 'случайный порядок · все треки';
   $('#all-count').textContent = n ? `${n} ${plural(n, 'трек', 'трека', 'треков')}` : '';
-  $('#home-sub').textContent = n ? `${n} ${plural(n, 'трек', 'трека', 'треков')}` : 'твоя музыка';
+  $('#home-sub').textContent = n ? `${n} ${plural(n, 'трек', 'трека', 'треков')}` : 'общая база';
   renderHome();
   if (state.view === 'list') renderListView();
   refreshFavUI();
 }
 
-/* web fallback: pick folder (desktop) or files (iOS) */
-function pickFolder() {
-  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent)
-    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  (ios ? $('#filepick') : $('#dirpick')).click();
-}
-function onDirPicked(e) {
-  importFiles(e.target.files);
-  e.target.value = '';
-}
-
-/* lazy duration probing on web */
+/* лениво узнаём длительность по URL (для отображения в списке) */
 const probeQueue = [];
 let probing = 0;
 function probeDuration(track) {
-  if ((!track.file && !track.url) || track.dur) return;
+  if (!track.url || track.dur) return;
   probeQueue.push(track);
   pumpProbe();
 }
@@ -185,119 +154,15 @@ function pumpProbe() {
     probing++;
     const a = new Audio();
     a.preload = 'metadata';
-    const done = () => {
+    a.onloadedmetadata = () => {
       if (isFinite(a.duration)) t.dur = a.duration;
       a.src = '';
       probing--;
       pumpProbe();
       $$(`.rdur[data-id="${CSS.escape(t.id)}"]`).forEach(el => el.textContent = fmt(t.dur));
-      // сохранить длительность в базу
-      if (t.dur && !isNative) {
-        openDB().then(db => new Promise(res => {
-          const st = db.transaction('tracks').objectStore('tracks');
-          const gq = st.get(t.id);
-          gq.onsuccess = () => {
-            if (gq.result) { gq.result.dur = t.dur; st.put(gq.result); }
-            res();
-          };
-          gq.onerror = res;
-        })).catch(() => {});
-      }
     };
-    a.onloadedmetadata = done;
     a.onerror = () => { probing--; pumpProbe(); };
-    a.src = t.file ? URL.createObjectURL(t.file) : t.url;
-  }
-}
-
-/* ---------- IndexedDB: постоянная библиотека (web / PWA) ---------- */
-let idb = null;
-function openDB() {
-  if (idb) return Promise.resolve(idb);
-  return new Promise((res, rej) => {
-    const rq = indexedDB.open('arbmusic', 1);
-    rq.onupgradeneeded = () => {
-      rq.result.createObjectStore('tracks', { keyPath: 'id' });
-    };
-    rq.onsuccess = () => { idb = rq.result; res(idb); };
-    rq.onerror = () => rej(rq.error);
-  });
-}
-function idbPut(rec) {
-  return openDB().then(db => new Promise((res, rej) => {
-    const tx = db.transaction('tracks', 'readwrite');
-    tx.objectStore('tracks').put(rec);
-    tx.oncomplete = res;
-    tx.onerror = () => rej(tx.error);
-  }));
-}
-function idbAll() {
-  return openDB().then(db => new Promise((res, rej) => {
-    const rq = db.transaction('tracks').objectStore('tracks').getAll();
-    rq.onsuccess = () => res(rq.result || []);
-    rq.onerror = () => rej(rq.error);
-  }));
-}
-function idbDel(id) {
-  return openDB().then(db => new Promise((res, rej) => {
-    const tx = db.transaction('tracks', 'readwrite');
-    tx.objectStore('tracks').delete(id);
-    tx.oncomplete = res;
-    tx.onerror = () => rej(tx.error);
-  }));
-}
-
-async function importFiles(fileList) {
-  const arr = [...fileList];
-  const audio = [], texts = {};
-  for (const f of arr) {
-    if (/\.(lrc|txt)$/i.test(f.name)) {
-      const base = f.name.replace(/\.(lrc|txt)$/i, '').toLowerCase();
-      try { texts[base] = await f.text(); } catch (_) { /* ignore */ }
-    } else if (AUDIO_EXT.test(f.name)) {
-      audio.push(f);
-    }
-  }
-  if (!audio.length) { toast('Аудиофайлы не найдены'); return; }
-  for (const f of audio) {
-    const base = f.name.replace(/\.[^.]+$/, '').toLowerCase();
-    const { artist, title } = parseName(f.name);
-    await idbPut({
-      id: `${f.name}_${f.size}`, name: f.name, title, artist, album: '',
-      dur: 0, ext: (f.name.match(/\.(\w+)$/i) || [, ''])[1].toLowerCase(),
-      blob: f, lrc: texts[base] || null,
-    });
-  }
-  await loadLibrary();
-  let extra = '';
-  try {
-    if (navigator.storage && navigator.storage.estimate) {
-      const est = await navigator.storage.estimate();
-      extra = ` · ${(est.usage / 1048576).toFixed(0)} МБ`;
-    }
-  } catch (_) { /* ignore */ }
-  toast(`Сохранено: ${audio.length} ${plural(audio.length, 'трек', 'трека', 'треков')}${extra}`);
-}
-
-async function loadLibrary() {
-  if (!('indexedDB' in window)) return false;
-  try {
-    const recs = await idbAll();
-    (state.localTracks || []).forEach(t => { if (t.url) URL.revokeObjectURL(t.url); });
-    state.lrcMap = {};
-    state.localTracks = recs.map(r => ({
-      id: r.id, name: r.name, title: r.title, artist: r.artist, album: r.album || '',
-      dur: r.dur || 0, ext: r.ext || '', url: URL.createObjectURL(r.blob), lrc: r.lrc || null,
-      cloud: !!r.cloud, cached: true,
-    }));
-    for (const t of state.localTracks) {
-      if (t.lrc && t.name) state.lrcMap[t.name.replace(/\.[^.]+$/, '').toLowerCase()] = t.lrc;
-    }
-    mergeLibrary();
-    return true;
-  } catch (e) {
-    console.error(e);
-    return false;
+    a.src = t.url;
   }
 }
 
@@ -333,23 +198,6 @@ async function loadCatalog() {
   mergeLibrary();
 }
 
-/* скачали трек — сохранили в базу на устройстве (слушать без интернета) */
-async function cacheCloudTrack(t) {
-  if (!t.cloud || t.cached) return;
-  t.cached = 'pending';
-  try {
-    const r = await fetch(t.url);
-    if (!r.ok) { t.cached = false; return; }
-    const blob = await r.blob();
-    await idbPut({
-      id: t.id, name: t.name, title: t.title, artist: t.artist, album: t.album || '',
-      dur: t.dur || 0, ext: t.ext, blob, lrc: null, cloud: true,
-    });
-    t.cached = true;
-    toast('Сохранено для оффлайна: ' + t.title);
-  } catch (_) { t.cached = false; }
-}
-
 /* ---------- rendering ---------- */
 function rowHTML(t, i) {
   const fav = state.favs.has(t.id);
@@ -359,10 +207,7 @@ function rowHTML(t, i) {
       <div class="rtitle">${esc(t.title)}</div>
       <div class="rartist">${esc(t.artist)}</div>
     </div>
-    <span class="rdur" data-id="${esc(t.id)}">${t.dur ? fmt(t.dur) : (t.file ? '·:··' : '')}</span>
-    <button class="rdel" data-del="${esc(t.id)}" aria-label="Удалить">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-    </button>
+    <span class="rdur" data-id="${esc(t.id)}">${t.dur ? fmt(t.dur) : ''}</span>
     <button class="rheart ${fav ? 'fav' : ''}" data-id="${esc(t.id)}" aria-label="В избранное">
       <svg viewBox="0 0 24 24" fill="none"><path d="M12 20.7C7 16.5 3.5 13.3 3.5 9.7 3.5 7 5.6 5 8.2 5c1.5 0 3 .7 3.8 2 .8-1.3 2.3-2 3.8-2 2.6 0 4.7 2 4.7 4.7 0 3.6-3.5 6.8-8.5 11z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
     </button>
@@ -373,15 +218,12 @@ function renderRows(container, list, emptyEl) {
   container.innerHTML = list.map((t, i) => rowHTML(t, i)).join('');
   if (emptyEl) emptyEl.classList.toggle('show', list.length === 0);
   markPlaying();
-  if (container === $('#tracklist') && !isNative) list.forEach(probeDuration);
+  if (container === $('#tracklist')) list.forEach(probeDuration);
 }
 
 function renderHome() {
   renderRows($('#tracklist'), state.tracks, $('#empty-home'));
-  $('#btn-pick-folder').classList.toggle('hidden', isNative);
-  $('#empty-home-text').textContent = isNative
-    ? 'Нажми «Обновить» сверху, чтобы найти музыку на устройстве'
-    : 'Выбери папку с музыкой, чтобы начать';
+  $('#empty-home-text').textContent = 'Треки появятся, когда админ опубликует их в общей базе';
 }
 
 function renderListView() {
@@ -1044,11 +886,7 @@ audio.addEventListener('loadedmetadata', () => {
   }
   $('#t-dur').textContent = fmt(audio.duration);
 });
-audio.addEventListener('play', () => {
-  updatePlayUI();
-  const c = current();
-  if (c && c.cloud) cacheCloudTrack(c);
-});
+audio.addEventListener('play', updatePlayUI);
 audio.addEventListener('pause', updatePlayUI);
 audio.addEventListener('ended', () => {
   if (state.repeat === 'one') { audio.currentTime = 0; audio.play().catch(() => {}); return; }
@@ -1095,14 +933,13 @@ function showLyrics(on) {
   }
 }
 
-/* ---------- permissions (android) ---------- */
-function showPerm(on) { $('#perm').classList.toggle('hidden', !on); $('#perm').classList.toggle('show', on); }
-
 /* ---------- events wiring ---------- */
 function wire() {
   // home
   $('#btn-rescan').addEventListener('click', () => {
-    if (isNative) scanNative(); else pickFolder();
+    const btn = $('#btn-rescan');
+    btn.classList.add('spin');
+    loadCatalog().finally(() => btn.classList.remove('spin'));
   });
   $('#card-mix').addEventListener('click', () => {
     if (!state.tracks.length) { toast('Сначала найди музыку'); return; }
@@ -1125,9 +962,6 @@ function wire() {
   wireAuth();
   wireUpload();
   wireAdmin();
-  $('#btn-pick-folder').addEventListener('click', pickFolder);
-  $('#dirpick').addEventListener('change', onDirPicked);
-  $('#filepick').addEventListener('change', onDirPicked);
 
   // list view
   $('#btn-list-shuffle').addEventListener('click', () => {
@@ -1145,18 +979,6 @@ function wire() {
   // row clicks (delegation)
   const rowHandler = (container, getList) => {
     container.addEventListener('click', e => {
-      const del = e.target.closest('.rdel');
-      if (del) {
-        e.stopPropagation();
-        const id = del.dataset.del;
-        idbDel(id).then(() => {
-          const wasCurrent = current() && current().id === id;
-          if (wasCurrent) { audio.pause(); audio.removeAttribute('src'); }
-          state.favs.delete(id); saveFavs();
-          loadLibrary().then(() => toast('Трек удалён'));
-        });
-        return;
-      }
       const heart = e.target.closest('.rheart');
       const row = e.target.closest('.row');
       if (!row) return;
@@ -1228,43 +1050,10 @@ function wire() {
   $('#lyrics-scroll').addEventListener('pointerdown', userScroll);
   $('#lyrics-scroll').addEventListener('wheel', userScroll, { passive: true });
 
-  // permission overlay
-  $('#btn-open-perm').addEventListener('click', async () => {
-    if (Native) await Native.openAllFilesSettings();
-  });
-  $('#btn-perm-later').addEventListener('click', () => showPerm(false));
-  window.addEventListener('focus', () => {
-    if (!$('#perm').classList.contains('hidden') && isNative) {
-      showPerm(false);
-      scanNative();
-    }
-  });
-
   // space = play/pause (desktop)
   window.addEventListener('keydown', e => {
     if (e.code === 'Space' && e.target.tagName !== 'INPUT') { e.preventDefault(); togglePlay(); }
   });
-}
-
-/* ---------- dev/test mode (browser: ?test=<dir>) ---------- */
-async function initTestServer() {
-  const q = new URLSearchParams(location.search).get('test');
-  if (!q || isNative) return false;
-  try {
-    const manifest = await (await fetch(`${q}/manifest.json`)).json();
-    state.localTracks = manifest.tracks.map((t, i) => ({
-      id: `test_${i}`, url: `${q}/${encodeURIComponent(t.file)}`, name: t.file,
-      title: t.title || t.file, artist: t.artist || 'Test', album: '', dur: t.dur || 0, ext: 'wav',
-    }));
-    for (const t of state.localTracks) {
-      const base = t.name.replace(/\.[^.]+$/, '').toLowerCase();
-      try {
-        state.lrcMap[base] = await (await fetch(`${q}/${encodeURIComponent(base)}.lrc`)).text();
-      } catch (_) { /* no lyrics */ }
-    }
-    mergeLibrary();
-    return true;
-  } catch (e) { return false; }
 }
 
 /* ---------- init ---------- */
@@ -1277,17 +1066,11 @@ async function init() {
   refreshFavUI();
   refreshProfile();
   renderHome();
-  // общий каталог — на всех платформах
+  // общий каталог — единственный источник треков, на всех платформах
   loadCatalog();
-  if (isNative) {
-    scanNative();
-  } else {
-    // service worker — оффлайн-режим (только на http/https, не в Electron file://)
-    if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }
-    const testOk = await initTestServer();
-    if (!testOk) await loadLibrary();
+  // service worker — только для оффлайн-запаса приложения (не в Electron file://)
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 }
 

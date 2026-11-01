@@ -18,11 +18,98 @@ function readJSON(file, def) {
   try { return JSON.parse(fs.readFileSync(path.join(DATA, file), 'utf8')); }
   catch (_) { return def; }
 }
+
+/* ---------- зеркалирование в GitHub (данные переживут перезапуск) ---------- */
+const GH_TOKEN = process.env.GH_TOKEN || '';
+const GH_MIRROR_REPO = process.env.GH_MIRROR_REPO || 'arbuzikyt99/ArbMusicPlayer';
+const mirrorQueue = {};
+let mirrorTimer = null;
+
+async function ghApi(path, opts = {}) {
+  const r = await fetch('https://api.github.com' + path, {
+    method: opts.method || 'GET',
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: 'Bearer ' + GH_TOKEN,
+      'User-Agent': 'arbmusic-api',
+    },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  if (!r.ok) throw new Error('GH ' + r.status + ' ' + path);
+  return r.status === 204 ? null : r.json();
+}
+
+async function commitMirror(batch, message) {
+  const treeItems = [];
+  for (const f of batch) {
+    const b64 = Buffer.isBuffer(f.content) ? f.content.toString('base64') : Buffer.from(f.content, 'utf8').toString('base64');
+    const b = await ghApi(`/repos/${GH_MIRROR_REPO}/git/blobs`, { method: 'POST', body: { content: b64, encoding: 'base64' } });
+    treeItems.push({ path: f.path, mode: '100644', type: 'blob', sha: b.sha });
+  }
+  const ref = await ghApi(`/repos/${GH_MIRROR_REPO}/git/ref/heads/main`);
+  const commit = await ghApi(`/repos/${GH_MIRROR_REPO}/git/commits/${ref.object.sha}`);
+  const baseTree = await ghApi(`/repos/${GH_MIRROR_REPO}/git/trees/${commit.tree.sha}`);
+  const newTree = await ghApi(`/repos/${GH_MIRROR_REPO}/git/trees`, { method: 'POST', body: { base_tree: baseTree.sha, tree: treeItems } });
+  const newCommit = await ghApi(`/repos/${GH_MIRROR_REPO}/git/commits`, { method: 'POST', body: { message, tree: newTree.sha, parents: [ref.object.sha] } });
+  // возможен конфликт, если кто-то запушил параллельно — один повтор
+  try {
+    await ghApi(`/repos/${GH_MIRROR_REPO}/git/refs/heads/main`, { method: 'PATCH', body: { sha: newCommit.sha, force: false } });
+  } catch (e) {
+    const ref2 = await ghApi(`/repos/${GH_MIRROR_REPO}/git/ref/heads/main`);
+    const c2 = await ghApi(`/repos/${GH_MIRROR_REPO}/git/commits/${ref2.object.sha}`);
+    const t2 = await ghApi(`/repos/${GH_MIRROR_REPO}/git/trees/${c2.tree.sha}`);
+    const nt2 = await ghApi(`/repos/${GH_MIRROR_REPO}/git/trees`, { method: 'POST', body: { base_tree: t2.sha, tree: treeItems } });
+    const nc2 = await ghApi(`/repos/${GH_MIRROR_REPO}/git/commits`, { method: 'POST', body: { message, tree: nt2.sha, parents: [ref2.object.sha] } });
+    await ghApi(`/repos/${GH_MIRROR_REPO}/git/refs/heads/main`, { method: 'PATCH', body: { sha: nc2.sha, force: false } });
+  }
+}
+
+function scheduleMirror(files, message) {
+  if (!GH_TOKEN) return;
+  for (const f of files) mirrorQueue[f.path] = f;
+  clearTimeout(mirrorTimer);
+  mirrorTimer = setTimeout(async () => {
+    const batch = Object.values(mirrorQueue);
+    for (const k of Object.keys(mirrorQueue)) delete mirrorQueue[k];
+    if (!batch.length) return;
+    try {
+      await commitMirror(batch, message || 'arbmusic server-data sync');
+      console.log('mirrored', batch.length, 'files');
+    } catch (e) {
+      console.error('mirror failed:', e.message);
+    }
+  }, 3000);
+}
+
 function writeJSON(file, obj) {
   const p = path.join(DATA, file);
   const tmp = p + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(obj));
   fs.renameSync(tmp, p);
+  scheduleMirror([{ path: 'server-data/' + file, content: JSON.stringify(obj) }], 'server-data: ' + file);
+}
+
+/* восстановление данных из зеркала при старте */
+async function restoreFromMirror() {
+  if (!GH_TOKEN) { console.log('mirror: GH_TOKEN не задан — зеркалирование выключено'); return; }
+  try {
+    const ref = await ghApi(`/repos/${GH_MIRROR_REPO}/git/ref/heads/main`);
+    const commit = await ghApi(`/repos/${GH_MIRROR_REPO}/git/commits/${ref.object.sha}`);
+    const tree = await ghApi(`/repos/${GH_MIRROR_REPO}/git/trees/${commit.tree.sha}?recursive=1`);
+    const entries = (tree.tree || []).filter(t => t.path.startsWith('server-data/') && t.type === 'blob');
+    if (!entries.length) { console.log('mirror: пусто, стартуем с чистой базы'); return; }
+    for (const e of entries) {
+      const blob = await ghApi(`/repos/${GH_MIRROR_REPO}/git/blobs/${e.sha}`);
+      const buf = Buffer.from(blob.content, 'base64');
+      const rel = e.path.slice('server-data/'.length);
+      const dest = path.join(DATA, rel);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, buf);
+    }
+    console.log('mirror: восстановлено', entries.length, 'файлов');
+  } catch (e) {
+    console.error('mirror restore failed:', e.message);
+  }
 }
 const users = () => readJSON('users.json', {});
 const queue = () => readJSON('queue.json', { items: [] });
@@ -184,8 +271,13 @@ const server = http.createServer(async (req, res) => {
         }
       }
       const id = crypto.randomBytes(8).toString('hex');
+      const mirrorFiles = [];
       fs.writeFileSync(path.join(DATA, 'pending', id + '.' + ext), file.data);
-      if (coverExt) fs.writeFileSync(path.join(DATA, 'pending', id + '.cover.' + coverExt), cover.data);
+      mirrorFiles.push({ path: 'server-data/pending/' + id + '.' + ext, content: file.data });
+      if (coverExt) {
+        fs.writeFileSync(path.join(DATA, 'pending', id + '.cover.' + coverExt), cover.data);
+        mirrorFiles.push({ path: 'server-data/pending/' + id + '.cover.' + coverExt, content: cover.data });
+      }
       let lrc = null;
       if (parts.lrc && parts.lrc.data && parts.lrc.data.length) {
         lrc = parts.lrc.data.toString('utf8').slice(0, 200000);
@@ -198,6 +290,7 @@ const server = http.createServer(async (req, res) => {
         size: file.data.length, lrc,
       });
       writeJSON('queue.json', q);
+      scheduleMirror(mirrorFiles, 'server-data: upload ' + id);
       return json(res, 200, { ok: true, id });
     }
 
@@ -272,4 +365,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => console.log(`arbmusic-api on 0.0.0.0:${PORT}, data: ${DATA}`));
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`arbmusic-api on 0.0.0.0:${PORT}, data: ${DATA}`);
+  restoreFromMirror();
+});
