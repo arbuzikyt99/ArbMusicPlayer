@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-01T12:34:44.395Z",
+  "updated": "2026-11-01T12:55:29.061Z",
   "tracks": [
     {
       "id": "cloud_ArbDJ - Deep Bass.wav",
@@ -27,6 +27,13 @@
       "file": "ArbDJ - Sky Line.wav",
       "title": "Sky Line",
       "artist": "ArbDJ",
+      "lrc": null
+    },
+    {
+      "id": "cloud_Арбузик - Мадам.mp3",
+      "file": "Арбузик - Мадам.mp3",
+      "title": "Мадам",
+      "artist": "Арбузик",
       "lrc": null
     }
   ]
