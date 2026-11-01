@@ -6,7 +6,10 @@ const $$ = s => [...document.querySelectorAll(s)];
 
 /* ---------- state ---------- */
 const state = {
-  tracks: [],            // all tracks
+  tracks: [],            // всё вместе: каталог + устройство + локальная база
+  cloudTracks: [],       // общий каталог с сервера
+  deviceTracks: [],      // найденные на устройстве (Android)
+  localTracks: [],       // сохранённые в базу на устройстве
   queue: [],             // current queue (track objects)
   baseQueue: [],         // unshuffled queue
   qi: -1,                // current index in queue
@@ -114,12 +117,12 @@ async function scanNative() {
     const res = await Native.scan();
     if (res.status === 'needsAllFiles') { showPerm(true); return; }
     if (res.status === 'denied') { toast('Нет доступа к файлам'); return; }
-    state.tracks = (res.tracks || []).map(t => ({
+    state.deviceTracks = (res.tracks || []).map(t => ({
       id: t.path, path: t.path, title: t.title || t.name, artist: t.artist || 'Неизвестный исполнитель',
       album: t.album || '', dur: t.duration || 0, ext: t.ext || '', name: t.name || '',
     }));
-    sortByDefault(state.tracks);
-    afterScan();
+    sortByDefault(state.deviceTracks);
+    mergeLibrary();
   } catch (e) {
     console.error(e); toast('Ошибка сканирования');
   } finally { btn.classList.remove('spin'); }
@@ -129,15 +132,27 @@ function sortByDefault(arr) {
   arr.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', 'ru') || (a.title || '').localeCompare(b.title || '', 'ru'));
 }
 
-function afterScan() {
+/* объединяем: общий каталог (сервер) + треки устройства + локальная база */
+function mergeLibrary() {
+  const seen = new Set();
+  const out = [];
+  const push = t => { if (t && !seen.has(t.id)) { out.push(t); seen.add(t.id); } };
+  (state.cloudTracks || []).forEach(push);
+  (state.deviceTracks || []).forEach(push);
+  (state.localTracks || []).forEach(push);
+  state.tracks = out;
+  sortByDefault(state.tracks);
+  refreshUI();
+}
+
+function refreshUI() {
   const n = state.tracks.length;
   $('#mix-sub').textContent = n ? `случайный порядок · ${n} ${plural(n, 'трек', 'трека', 'треков')}` : 'случайный порядок · все треки';
   $('#all-count').textContent = n ? `${n} ${plural(n, 'трек', 'трека', 'треков')}` : '';
-  $('#home-sub').textContent = n ? `${n} ${plural(n, 'трек', 'трека', 'треков')} найдено` : 'твоя музыка';
+  $('#home-sub').textContent = n ? `${n} ${plural(n, 'трек', 'трека', 'треков')}` : 'твоя музыка';
   renderHome();
   if (state.view === 'list') renderListView();
   refreshFavUI();
-  if (n) toast(`Найдено ${n} ${plural(n, 'трек', 'трека', 'треков')}`);
 }
 
 /* web fallback: pick folder (desktop) or files (iOS) */
@@ -263,22 +278,65 @@ async function loadLibrary() {
   if (!('indexedDB' in window)) return false;
   try {
     const recs = await idbAll();
-    state.tracks.forEach(t => { if (t.url) URL.revokeObjectURL(t.url); });
+    (state.localTracks || []).forEach(t => { if (t.url) URL.revokeObjectURL(t.url); });
     state.lrcMap = {};
-    state.tracks = recs.map(r => ({
+    state.localTracks = recs.map(r => ({
       id: r.id, name: r.name, title: r.title, artist: r.artist, album: r.album || '',
       dur: r.dur || 0, ext: r.ext || '', url: URL.createObjectURL(r.blob), lrc: r.lrc || null,
+      cloud: !!r.cloud, cached: true,
     }));
-    for (const t of state.tracks) {
+    for (const t of state.localTracks) {
       if (t.lrc && t.name) state.lrcMap[t.name.replace(/\.[^.]+$/, '').toLowerCase()] = t.lrc;
     }
-    sortByDefault(state.tracks);
-    afterScan();
+    mergeLibrary();
     return true;
   } catch (e) {
     console.error(e);
     return false;
   }
+}
+
+/* ---------- общий каталог (все треки сервера — видны всем) ---------- */
+const CATALOG_URL = 'https://raw.githubusercontent.com/arbuzikyt99/ArbMusicPlayer/main/catalog.json';
+const MUSIC_BASE = 'https://raw.githubusercontent.com/arbuzikyt99/ArbMusicPlayer/main/music/';
+
+async function loadCatalog() {
+  let data = null;
+  try {
+    const r = await fetch(CATALOG_URL, { cache: 'no-cache' });
+    if (r.ok) {
+      data = await r.json();
+      try { localStorage.setItem('arbmusic.catalog', JSON.stringify(data)); } catch (_) { /* ignore */ }
+    }
+  } catch (_) { /* оффлайн — берём сохранённую копию */ }
+  if (!data) {
+    try { data = JSON.parse(localStorage.getItem('arbmusic.catalog') || 'null'); } catch (_) { /* ignore */ }
+  }
+  if (!data || !Array.isArray(data.tracks)) return;
+  state.cloudTracks = data.tracks.map(t => ({
+    id: 'cloud_' + t.file, name: t.file, title: t.title, artist: t.artist || 'Неизвестный исполнитель', album: '',
+    dur: 0, ext: (t.file.match(/\.(\w+)$/i) || [, ''])[1].toLowerCase(),
+    cloud: true, lrcFile: t.lrc || null,
+    url: MUSIC_BASE + encodeURIComponent(t.file),
+  }));
+  mergeLibrary();
+}
+
+/* скачали трек — сохранили в базу на устройстве (слушать без интернета) */
+async function cacheCloudTrack(t) {
+  if (!t.cloud || t.cached) return;
+  t.cached = 'pending';
+  try {
+    const r = await fetch(t.url);
+    if (!r.ok) { t.cached = false; return; }
+    const blob = await r.blob();
+    await idbPut({
+      id: t.id, name: t.name, title: t.title, artist: t.artist, album: t.album || '',
+      dur: t.dur || 0, ext: t.ext, blob, lrc: null, cloud: true,
+    });
+    t.cached = true;
+    toast('Сохранено для оффлайна: ' + t.title);
+  } catch (_) { t.cached = false; }
 }
 
 /* ---------- rendering ---------- */
@@ -525,6 +583,21 @@ async function loadLyrics(t) {
       const v = state.lrcMap[base];
       if (typeof v === 'string') text = v;
     }
+    if (!text && t.cloud && t.lrcFile) {
+      // текст трека из общего каталога — с офлайн-копией
+      const key = 'arbmusic.lrc.' + t.id;
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved) text = saved;
+        else {
+          const r = await fetch(MUSIC_BASE + encodeURIComponent(t.lrcFile));
+          if (r.ok) {
+            text = await r.text();
+            try { localStorage.setItem(key, text); } catch (_) { /* ignore */ }
+          }
+        }
+      } catch (_) { /* ignore */ }
+    }
   } catch (_) { /* ignore */ }
 
   const box = $('#lyrics-scroll');
@@ -633,7 +706,11 @@ audio.addEventListener('loadedmetadata', () => {
   }
   $('#t-dur').textContent = fmt(audio.duration);
 });
-audio.addEventListener('play', updatePlayUI);
+audio.addEventListener('play', () => {
+  updatePlayUI();
+  const c = current();
+  if (c && c.cloud) cacheCloudTrack(c);
+});
 audio.addEventListener('pause', updatePlayUI);
 audio.addEventListener('ended', () => {
   if (state.repeat === 'one') { audio.currentTime = 0; audio.play().catch(() => {}); return; }
@@ -829,18 +906,17 @@ async function initTestServer() {
   if (!q || isNative) return false;
   try {
     const manifest = await (await fetch(`${q}/manifest.json`)).json();
-    state.tracks = manifest.tracks.map((t, i) => ({
+    state.localTracks = manifest.tracks.map((t, i) => ({
       id: `test_${i}`, url: `${q}/${encodeURIComponent(t.file)}`, name: t.file,
       title: t.title || t.file, artist: t.artist || 'Test', album: '', dur: t.dur || 0, ext: 'wav',
     }));
-    sortByDefault(state.tracks);
-    for (const t of state.tracks) {
+    for (const t of state.localTracks) {
       const base = t.name.replace(/\.[^.]+$/, '').toLowerCase();
       try {
         state.lrcMap[base] = await (await fetch(`${q}/${encodeURIComponent(base)}.lrc`)).text();
       } catch (_) { /* no lyrics */ }
     }
-    afterScan();
+    mergeLibrary();
     return true;
   } catch (e) { return false; }
 }
@@ -854,6 +930,8 @@ async function init() {
   updatePlayUI();
   refreshFavUI();
   renderHome();
+  // общий каталог — на всех платформах
+  loadCatalog();
   if (isNative) {
     scanNative();
   } else {

@@ -15,3 +15,6 @@ test-music/
 ArbMusic.apk
 dist/
 electron/dist-win/
+
+# локальная сборка сайта
+.zcode-site/
