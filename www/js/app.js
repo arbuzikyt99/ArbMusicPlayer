@@ -289,7 +289,6 @@ function showView(name) {
 /* ================= API / аккаунты / модерация ================= */
 const API_URL = 'https://arbmusic-7371.zai-ai.site';
 const GH_REPO = 'arbuzikyt99/ArbMusicPlayer';
-const ADMIN_LOGIN = 'arbuzikyt99';
 
 function session() {
   try { return JSON.parse(localStorage.getItem('arbmusic.session') || 'null'); } catch (_) { return null; }
@@ -443,75 +442,9 @@ function wireUpload() {
   });
 }
 
-/* ---------- админ-панель ---------- */
-function ghKey() { return localStorage.getItem('arbmusic.ghkey') || ''; }
-
-function bytesToB64(buf) {
-  const bytes = new Uint8Array(buf);
-  let bin = '';
-  const CH = 0x8000;
-  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
-  return btoa(bin);
-}
-async function gh(path, opts = {}) {
-  const r = await fetch('https://api.github.com' + path, {
-    method: opts.method || 'GET',
-    headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + ghKey() },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  if (!r.ok) throw new Error('GitHub ' + r.status + ': ' + (await r.text()).slice(0, 140));
-  return r.status === 204 ? null : r.json();
-}
+/* ---------- админ-панель (публикация делает сервер) ---------- */
 function b64ToJSON(b64) {
   return JSON.parse(decodeURIComponent(escape(atob(b64.replace(/\n/g, '')))));
-}
-function jsonToB64(obj) {
-  return btoa(unescape(encodeURIComponent(JSON.stringify(obj, null, 2))));
-}
-
-/* одобрить: аудио с API → коммит в репозиторий → обновление каталога → снятие с очереди */
-async function approveTrack(item) {
-  toast('Публикую: ' + item.title + '…');
-  const fileName = `${item.artist} - ${item.title}.${item.ext}`.replace(/[\\/:*?"<>|]/g, '_').trim();
-  const files = [{ path: 'music/' + fileName, content: await (await fetch(API_URL + '/audio/' + item.id)).arrayBuffer() }];
-  let coverRel = null;
-  if (item.coverExt) {
-    coverRel = 'covers/' + fileName.replace(/\.[^.]+$/, '') + '.' + item.coverExt;
-    files.push({ path: 'music/' + coverRel, content: await (await fetch(API_URL + '/audio/' + item.id + '/cover')).arrayBuffer() });
-  }
-  if (item.lrc) files.push({ path: 'music/' + fileName.replace(/\.[^.]+$/, '.lrc'), content: item.lrc });
-
-  const treeItems = [];
-  for (const f of files) {
-    const b = await gh(`/repos/${GH_REPO}/git/blobs`, { method: 'POST', body: { content: bytesToB64(f.content), encoding: 'base64' } });
-    treeItems.push({ path: f.path, mode: '100644', type: 'blob', sha: b.sha });
-  }
-  const ref = await gh(`/repos/${GH_REPO}/git/ref/heads/main`);
-  const commit = await gh(`/repos/${GH_REPO}/git/commits/${ref.object.sha}`);
-  const baseTree = await gh(`/repos/${GH_REPO}/git/trees/${commit.tree.sha}`);
-  const newTree = await gh(`/repos/${GH_REPO}/git/trees`, { method: 'POST', body: { base_tree: baseTree.sha, tree: treeItems } });
-  const newCommit = await gh(`/repos/${GH_REPO}/git/commits`, { method: 'POST', body: { message: 'Add track: ' + fileName, tree: newTree.sha, parents: [ref.object.sha] } });
-  await gh(`/repos/${GH_REPO}/git/refs/heads/main`, { method: 'PATCH', body: { sha: newCommit.sha, force: false } });
-
-  let cat = { updated: new Date().toISOString(), tracks: [] };
-  let catSha = null;
-  try {
-    const cur = await gh(`/repos/${GH_REPO}/contents/catalog.json`);
-    catSha = cur.sha;
-    cat = b64ToJSON(cur.content);
-  } catch (_) { /* нет каталога — создадим */ }
-  cat.tracks = cat.tracks || [];
-  cat.tracks.push({
-    id: 'cloud_' + fileName, file: fileName, title: item.title, artist: item.artist,
-    lrc: item.lrc ? fileName.replace(/\.[^.]+$/, '.lrc') : null,
-    cover: coverRel,
-  });
-  cat.updated = new Date().toISOString();
-  const putBody = { message: 'catalog: + ' + fileName, content: jsonToB64(cat) };
-  if (catSha) putBody.sha = catSha;
-  await gh(`/repos/${GH_REPO}/contents/catalog.json`, { method: 'PUT', body: putBody });
-
-  await api('/api/moderate', { body: { id: item.id, action: 'approve' } });
 }
 
 function adminItemHTML(t) {
@@ -541,29 +474,8 @@ async function loadAdminQueue() {
 
 function wireAdmin() {
   $('#btn-admin').addEventListener('click', () => {
-    const hasKey = !!ghKey();
-    $('#admin-key-box').classList.toggle('hidden', hasKey);
-    $('#admin-panel-box').classList.toggle('hidden', !hasKey);
     openModal('modal-admin');
-    if (hasKey) loadAdminQueue();
-  });
-  $('#admin-key-save').addEventListener('click', async () => {
-    const err = $('#admin-err');
-    err.classList.add('hidden');
-    const key = $('#admin-key').value.trim();
-    try {
-      const r = await fetch('https://api.github.com/user', { headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + key } });
-      if (!r.ok) throw new Error('Токен не подошёл (' + r.status + ')');
-      const u = await r.json();
-      if (u.login.toLowerCase() !== ADMIN_LOGIN) throw new Error('Это токен другого аккаунта');
-      localStorage.setItem('arbmusic.ghkey', key);
-      $('#admin-key-box').classList.add('hidden');
-      $('#admin-panel-box').classList.remove('hidden');
-      loadAdminQueue();
-    } catch (e) {
-      err.textContent = e.message;
-      err.classList.remove('hidden');
-    }
+    loadAdminQueue();
   });
   $('#admin-refresh').addEventListener('click', loadAdminQueue);
   $('#admin-queue').addEventListener('click', async e => {
@@ -591,7 +503,7 @@ function wireAdmin() {
       const btn = e.target.closest('.ok');
       btn.disabled = true;
       try {
-        await approveTrack(item);
+        await api('/api/publish', { body: { id } });
         toast('Опубликован в общей базе ✅');
         loadAdminQueue();
         loadCatalog();

@@ -42,6 +42,11 @@ async function ghApi(path, opts = {}) {
 async function commitMirror(batch, message) {
   const treeItems = [];
   for (const f of batch) {
+    if (f.content === null) {
+      // удаление файла из зеркала
+      treeItems.push({ path: f.path, mode: '100644', type: 'blob', sha: null });
+      continue;
+    }
     const b64 = Buffer.isBuffer(f.content) ? f.content.toString('base64') : Buffer.from(f.content, 'utf8').toString('base64');
     const b = await ghApi(`/repos/${GH_MIRROR_REPO}/git/blobs`, { method: 'POST', body: { content: b64, encoding: 'base64' } });
     treeItems.push({ path: f.path, mode: '100644', type: 'blob', sha: b.sha });
@@ -318,6 +323,74 @@ const server = http.createServer(async (req, res) => {
         'Accept-Ranges': 'none',
       });
       return res.end(data);
+    }
+
+    /* --- админ: публикация трека (коммит в репозиторий делает сервер) --- */
+    if (p === '/api/publish' && req.method === 'POST') {
+      const me = checkToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+      if (!me || !me.admin) return json(res, 403, { error: 'Только для админа' });
+      if (!GH_TOKEN) return json(res, 500, { error: 'Сервер не подключён к GitHub' });
+      const body = JSON.parse((await readBody(req, 1e6)).toString('utf8') || '{}');
+      const q = queue();
+      const idx = q.items.findIndex(i => i.id === body.id);
+      if (idx === -1) return json(res, 404, { error: 'Трек не найден в очереди' });
+      const item = q.items[idx];
+      try {
+        const fileName = `${item.artist} - ${item.title}.${item.ext}`.replace(/[\\/:*?"<>|]/g, '_').trim();
+        const audioBuf = fs.readFileSync(path.join(DATA, 'pending', item.id + '.' + item.ext));
+        const files = [{ path: 'music/' + fileName, content: audioBuf }];
+        let coverRel = null;
+        if (item.coverExt) {
+          coverRel = 'covers/' + fileName.replace(/\.[^.]+$/, '') + '.' + item.coverExt;
+          files.push({ path: 'music/' + coverRel, content: fs.readFileSync(path.join(DATA, 'pending', item.id + '.cover.' + item.coverExt)) });
+        }
+        if (item.lrc) files.push({ path: 'music/' + fileName.replace(/\.[^.]+$/, '.lrc'), content: item.lrc });
+        await commitMirror(files, 'Add track: ' + fileName);
+
+        // обновляем каталог
+        let cat = { updated: new Date().toISOString(), tracks: [] };
+        let catSha = null;
+        try {
+          const cur = await ghApi(`/repos/${GH_MIRROR_REPO}/contents/catalog.json`);
+          catSha = cur.sha;
+          cat = JSON.parse(Buffer.from(cur.content, 'base64').toString('utf8'));
+        } catch (_) { /* нет каталога — создадим */ }
+        cat.tracks = cat.tracks || [];
+        cat.tracks.push({
+          id: 'cloud_' + fileName, file: fileName, title: item.title, artist: item.artist,
+          lrc: item.lrc ? fileName.replace(/\.[^.]+$/, '.lrc') : null,
+          cover: coverRel,
+        });
+        cat.updated = new Date().toISOString();
+        const putBody = { message: 'catalog: + ' + fileName, content: Buffer.from(JSON.stringify(cat, null, 2)).toString('base64') };
+        if (catSha) putBody.sha = catSha;
+        await ghApi(`/repos/${GH_MIRROR_REPO}/contents/catalog.json`, { method: 'PUT', body: putBody });
+
+        // снять с очереди + почистить
+        q.items.splice(idx, 1);
+        writeJSON('queue.json', q);
+        const removeFiles = () => {
+          try {
+            for (const f of fs.readdirSync(path.join(DATA, 'pending'))) {
+              if (f.startsWith(item.id + '.')) fs.unlinkSync(path.join(DATA, 'pending', f));
+            }
+          } catch (_) {}
+        };
+        removeFiles();
+        // почистить зеркальные копии ожидающих файлов
+        try {
+          await commitMirror(
+            [
+              { path: 'server-data/pending/' + item.id + '.' + item.ext, content: null },
+              ...(item.coverExt ? [{ path: 'server-data/pending/' + item.id + '.cover.' + item.coverExt, content: null }] : []),
+            ],
+            'server-data: published ' + item.id
+          );
+        } catch (_) { /* не критично */ }
+        return json(res, 200, { ok: true, published: fileName });
+      } catch (e) {
+        return json(res, 500, { error: 'Публикация не удалась: ' + e.message });
+      }
     }
 
     /* --- админ: очередь --- */
