@@ -142,8 +142,12 @@ section.view.active { opacity: 1; pointer-events: auto; transform: none; z-index
 .row {
   display: flex; align-items: center; gap: 12px; padding: 8px;
   border-radius: var(--r-md); cursor: pointer;
-  transition: background .15s ease, transform .12s ease;
+  background: rgba(255, 255, 255, .03);
+  border: 1px solid rgba(255, 255, 255, .05);
+  margin-bottom: 5px;
+  transition: background .2s ease, border-color .2s ease, transform .12s ease;
 }
+.row:hover { background: rgba(255, 255, 255, .055); border-color: rgba(255, 255, 255, .09); }
 .row:active { background: var(--glass); transform: scale(.985); }
 .row.playing .rtitle { color: transparent; background: var(--grad); -webkit-background-clip: text; background-clip: text; }
 
@@ -369,8 +373,30 @@ section.view.active { opacity: 1; pointer-events: auto; transform: none; z-index
   body { display: flex; align-items: stretch; justify-content: center; }
 }
 
+/* десктоп: стеклянная панель-рамка вокруг приложения */
+@media (min-width: 900px) {
+  body::before {
+    content: '';
+    position: fixed; top: 14px; bottom: 14px; left: 50%; transform: translateX(-50%);
+    width: 566px; z-index: 0;
+    background: rgba(20, 20, 32, .55);
+    border: 1px solid rgba(255, 255, 255, .09);
+    border-radius: 34px;
+    backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .06);
+  }
+  .bgfx {
+    background:
+      radial-gradient(45% 35% at 28% 12%, rgba(139, 92, 246, .28), transparent 62%),
+      radial-gradient(45% 35% at 74% 88%, rgba(236, 72, 153, .22), transparent 60%),
+      radial-gradient(35% 30% at 85% 20%, rgba(56, 189, 248, .12), transparent 65%),
+      radial-gradient(35% 30% at 15% 80%, rgba(139, 92, 246, .14), transparent 65%),
+      var(--bg);
+  }
+}
+
 /* ============================================================
-   HOTBAR — нижняя навигация (стекло)
+   HOTBAR — нижняя навигация (стекло) + скользящая таблетка
    ============================================================ */
 #hotbar {
   position: fixed; left: 14px; right: 14px; bottom: calc(var(--safe-b) + 10px);
@@ -382,18 +408,51 @@ section.view.active { opacity: 1; pointer-events: auto; transform: none; z-index
   box-shadow: 0 14px 44px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .08);
   border-radius: 24px; padding: 8px;
 }
+#hb-pill {
+  position: absolute; top: 8px; height: calc(100% - 16px);
+  left: 8px; width: calc(25% - 8px);
+  border-radius: 17px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, .42), rgba(236, 72, 153, .42));
+  border: 1px solid rgba(255, 255, 255, .22);
+  box-shadow: 0 4px 20px rgba(139, 92, 246, .35), inset 0 1px 0 rgba(255, 255, 255, .2);
+  transition: left .38s cubic-bezier(.34, 1.3, .42, 1), width .38s cubic-bezier(.34, 1.3, .42, 1);
+  pointer-events: none;
+}
 .hb-btn {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
   padding: 8px 0 7px; border-radius: 17px; color: var(--sub);
   font-size: 10.5px; font-weight: 700; letter-spacing: .2px;
-  transition: all .22s cubic-bezier(.32,.72,0,1);
+  position: relative; z-index: 1;
+  transition: color .25s ease, transform .15s ease;
 }
 .hb-btn svg { width: 21px; height: 21px; transition: transform .22s ease; }
 .hb-btn:active svg { transform: scale(.88); }
 .hb-btn.active {
   color: #fff;
-  background: linear-gradient(135deg, rgba(139, 92, 246, .38), rgba(236, 72, 153, .38));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 4px 18px rgba(139, 92, 246, .25);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .35);
+}
+
+/* ============================================================
+   ПЛАВАЮЩЕЕ КОЛЬЦО — обводка перелетает на нажатую кнопку
+   ============================================================ */
+#ring {
+  position: fixed; left: 0; top: 0; width: 0; height: 0;
+  border: 2px solid transparent;
+  border-radius: 20px;
+  background: linear-gradient(rgba(255, 255, 255, .05), rgba(255, 255, 255, .05)) padding-box,
+              var(--grad) border-box;
+  box-shadow: 0 0 22px rgba(139, 92, 246, .45);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 99;
+  transition:
+    left .34s cubic-bezier(.34, 1.25, .42, 1),
+    top .34s cubic-bezier(.34, 1.25, .42, 1),
+    width .34s cubic-bezier(.34, 1.25, .42, 1),
+    height .34s cubic-bezier(.34, 1.25, .42, 1),
+    border-radius .34s ease,
+    opacity .35s ease;
+  will-change: left, top, width, height;
 }
 
 /* ============================================================

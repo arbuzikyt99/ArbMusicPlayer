@@ -324,12 +324,42 @@ function getListForView() {
 }
 
 /* ---------- views ---------- */
+function moveHotbarPill() {
+  const btn = document.querySelector('.hb-btn.active');
+  const pill = document.getElementById('hb-pill');
+  if (!btn || !pill) return;
+  pill.style.left = btn.offsetLeft + 'px';
+  pill.style.width = btn.offsetWidth + 'px';
+}
+window.addEventListener('resize', moveHotbarPill);
+
+/* кольцо-обводка перелетает на нажатую кнопку */
+function ringTo(el) {
+  const ring = document.getElementById('ring');
+  if (!ring) return;
+  const r = el.getBoundingClientRect();
+  const br = parseFloat(getComputedStyle(el).borderRadius) || 18;
+  ring.style.left = (r.left - 3) + 'px';
+  ring.style.top = (r.top - 3) + 'px';
+  ring.style.width = (r.width + 6) + 'px';
+  ring.style.height = (r.height + 6) + 'px';
+  ring.style.borderRadius = (br + 3) + 'px';
+  ring.style.opacity = '1';
+  clearTimeout(ring._t);
+  ring._t = setTimeout(() => { ring.style.opacity = '0'; }, 1100);
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('.hb-btn, .card, .search-pill, .profile-action, .chipbtn, .iconbtn, .play-btn, .btn-grad, .file-pick, .abtn, .row');
+  if (t) ringTo(t);
+}, true);
+
 function showView(name) {
   state.view = name;
   $$('.view').forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
   const navMap = { home: 'home', search: 'search', list: 'favs', profile: 'profile' };
   const navKey = navMap[name] || 'home';
   $$('.hb-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === navKey));
+  moveHotbarPill();
   if (name === 'list') renderListView();
   if (name === 'search') renderSearch($('#search-input').value);
   if (name === 'profile') refreshProfile();
@@ -1054,7 +1084,7 @@ function wire() {
 }
 
 /* ---------- авто-обновление веб-версии ---------- */
-const APP_VER = 4;
+const APP_VER = 5;
 async function checkVersion() {
   if (isNative || !/^https?:$/.test(location.protocol)) return;
   try {
@@ -1081,6 +1111,7 @@ async function init() {
   refreshFavUI();
   refreshProfile();
   renderHome();
+  moveHotbarPill();
   // общий каталог — единственный источник треков, на всех платформах
   loadCatalog();
   checkVersion();
