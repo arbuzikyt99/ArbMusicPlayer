@@ -24,6 +24,8 @@ const GH_TOKEN = process.env.GH_TOKEN || '';
 const GH_MIRROR_REPO = process.env.GH_MIRROR_REPO || 'arbuzikyt99/ArbMusicPlayer';
 const mirrorQueue = {};
 let mirrorTimer = null;
+let catCache = null;
+let catCacheAt = 0;
 
 async function ghApi(path, opts = {}) {
   const r = await fetch('https://api.github.com' + path, {
@@ -213,6 +215,23 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return json(res, 204, {});
 
   try {
+    /* --- каталог для приложения (без лимитов GitHub) --- */
+    if (p === '/api/catalog' && req.method === 'GET') {
+      let data = null;
+      if (GH_TOKEN && Date.now() - catCacheAt > 30000) {
+        try {
+          const cur = await ghApi(`/repos/${GH_MIRROR_REPO}/contents/catalog.json`);
+          data = JSON.parse(Buffer.from(cur.content, 'base64').toString('utf8'));
+          catCache = data;
+          catCacheAt = Date.now();
+        } catch (_) { /* упадём на fallback ниже */ }
+      } else if (catCache) {
+        data = catCache;
+      }
+      if (!data) return json(res, 502, { error: 'catalog unavailable' });
+      return json(res, 200, data);
+    }
+
     /* health */
     if (p === '/' || p === '/api/health') return json(res, 200, { ok: true, service: 'arbmusic-api', time: Date.now() });
 

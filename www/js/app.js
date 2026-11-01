@@ -178,11 +178,17 @@ const MUSIC_BASE = 'https://raw.githubusercontent.com/arbuzikyt99/ArbMusicPlayer
 
 async function loadCatalog() {
   let data = null;
-  // свежий каталог через GitHub API (без CDN-кэша), потом raw, потом офлайн-копия
+  // 1) наш сервер (без лимитов), 2) GitHub API, 3) raw, 4) офлайн-копия
   try {
-    const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/catalog.json`, { headers: { Accept: 'application/vnd.github+json' } });
-    if (r.ok) data = b64ToJSON((await r.json()).content);
+    const r = await fetch(API_URL + '/api/catalog', { cache: 'no-cache' });
+    if (r.ok) data = await r.json();
   } catch (_) { /* ignore */ }
+  if (!data) {
+    try {
+      const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/catalog.json`, { headers: { Accept: 'application/vnd.github+json' } });
+      if (r.ok) data = b64ToJSON((await r.json()).content);
+    } catch (_) { /* ignore */ }
+  }
   if (!data) {
     try {
       const r = await fetch(CATALOG_URL, { cache: 'no-cache' });
