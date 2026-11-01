@@ -1,0 +1,17 @@
+node_modules/
+android/app/build/
+android/build/
+android/.gradle/
+ios/App/App/public/
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/
+*.ipa
+.DS_Store
+
+# локальные артефакты
+готовые проги/
+test-music/
+ArbMusic.apk
+dist/
+electron/

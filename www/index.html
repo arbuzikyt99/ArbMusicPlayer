@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#07070c">
+  <title>ArbMusic</title>
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="bgfx"></div>
+  <div class="noise"></div>
+
+  <!-- ============ HOME ============ -->
+  <section class="view active" id="view-home">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 14v-4M8 17V7M12 20V4M16 17V7M20 14v-4" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>
+        </div>
+        <div class="brand-txt">
+          <h1>ArbMusic</h1>
+          <span id="home-sub">твоя музыка</span>
+        </div>
+      </div>
+      <button class="iconbtn" id="btn-rescan" aria-label="Обновить">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M20 11a8 8 0 1 0-2.3 6.3M20 5v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </header>
+
+    <div class="hero-cards">
+      <button class="card card-mix" id="card-mix">
+        <div class="card-ico">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7M16 21h5v-5M21 21l-7-7M8 3H3v5M3 3l7 7" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="card-txt">
+          <span class="card-title">Микс</span>
+          <span class="card-sub" id="mix-sub">случайный порядок · все треки</span>
+        </div>
+        <span class="card-glow"></span>
+      </button>
+
+      <button class="card card-favs" id="card-favs">
+        <div class="card-ico">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 20.7C7 16.5 3.5 13.3 3.5 9.7 3.5 7 5.6 5 8.2 5c1.5 0 3 .7 3.8 2 .8-1.3 2.3-2 3.8-2 2.6 0 4.7 2 4.7 4.7 0 3.6-3.5 6.8-8.5 11z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="card-txt">
+          <span class="card-title">Моя музыка</span>
+          <span class="card-sub" id="favs-sub">сохранённые треки</span>
+        </div>
+        <span class="card-glow"></span>
+      </button>
+    </div>
+
+    <button class="search-pill" id="btn-search">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Поиск треков и исполнителей</span>
+    </button>
+
+    <div class="section-head">
+      <h2>Все треки</h2>
+      <span class="count" id="all-count"></span>
+    </div>
+    <div class="tracks" id="tracklist"></div>
+
+    <div class="empty" id="empty-home">
+      <div class="empty-art">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M10 15.5v-5l4-1v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="15.5" r="1.4" fill="currentColor"/><circle cx="13" cy="14.5" r="1.4" fill="currentColor"/></svg>
+      </div>
+      <h3>Треков пока нет</h3>
+      <p id="empty-home-text">Нажми «Обновить», чтобы найти музыку на устройстве</p>
+      <button class="btn-grad" id="btn-pick-folder">Выбрать папку с музыкой</button>
+    </div>
+  </section>
+
+  <!-- ============ LIST (микс / моя музыка) ============ -->
+  <section class="view" id="view-list">
+    <header class="topbar">
+      <button class="iconbtn back" data-back aria-label="Назад">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <h2 id="list-title">Список</h2>
+      <button class="iconbtn" id="btn-list-shuffle" aria-label="Перемешать">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7M16 21h5v-5M21 21l-7-7M8 3H3v5M3 3l7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </header>
+    <div class="tracks" id="list-tracks"></div>
+    <div class="empty" id="empty-list">
+      <div class="empty-art">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 20.7C7 16.5 3.5 13.3 3.5 9.7 3.5 7 5.6 5 8.2 5c1.5 0 3 .7 3.8 2 .8-1.3 2.3-2 3.8-2 2.6 0 4.7 2 4.7 4.7 0 3.6-3.5 6.8-8.5 11z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </div>
+      <h3>Здесь пока пусто</h3>
+      <p>Сохрани треки — жми сердечко у трека или в плеере</p>
+    </div>
+  </section>
+
+  <!-- ============ SEARCH ============ -->
+  <section class="view" id="view-search">
+    <header class="topbar">
+      <button class="iconbtn back" data-back aria-label="Назад">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="search-input" type="search" placeholder="Название или исполнитель…" autocomplete="off">
+      </div>
+    </header>
+    <div class="tracks" id="search-results"></div>
+    <div class="empty" id="empty-search">
+      <div class="empty-art">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M8.5 11h5M8.5 8.5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".5"/></svg>
+      </div>
+      <h3>Ничего не найдено</h3>
+      <p>Попробуй другое название или исполнителя</p>
+    </div>
+  </section>
+
+  <!-- ============ MINI PLAYER ============ -->
+  <div id="mini" class="hidden">
+    <div class="mini-prog"><i id="mini-fill"></i></div>
+    <div class="thumb mini-art" id="mini-art"></div>
+    <div class="mini-meta">
+      <div class="mini-title" id="mini-title">—</div>
+      <div class="mini-artist" id="mini-artist"></div>
+    </div>
+    <button class="iconbtn" id="mini-play" aria-label="Play"></button>
+    <button class="iconbtn" id="mini-next" aria-label="Next">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5.5v13c0 .8.9 1.3 1.6.9l9-6.1a1 1 0 0 0 0-1.7l-9-6A1 1 0 0 0 6 5.5z"/><rect x="17" y="5" width="2.4" height="14" rx="1.2"/></svg>
+    </button>
+  </div>
+
+  <!-- ============ FULL PLAYER ============ -->
+  <div id="player" class="sheet">
+    <div class="player-inner">
+      <header class="p-top">
+        <button class="iconbtn" id="btn-collapse" aria-label="Свернуть">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <span class="p-label">Сейчас играет</span>
+        <span class="p-spacer"></span>
+      </header>
+
+      <div class="p-stage">
+        <div class="p-art-wrap" id="p-art-wrap">
+          <div class="p-art-glow" id="p-art-glow"></div>
+          <div class="thumb p-art" id="p-art"></div>
+        </div>
+        <div class="p-lyrics hidden" id="p-lyrics">
+          <div class="lyrics-scroll" id="lyrics-scroll"></div>
+        </div>
+      </div>
+
+      <div class="p-meta">
+        <div class="p-meta-txt">
+          <h2 id="p-title">—</h2>
+          <h3 id="p-artist"></h3>
+        </div>
+        <button class="iconbtn" id="btn-fav" aria-label="В избранное">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 20.7C7 16.5 3.5 13.3 3.5 9.7 3.5 7 5.6 5 8.2 5c1.5 0 3 .7 3.8 2 .8-1.3 2.3-2 3.8-2 2.6 0 4.7 2 4.7 4.7 0 3.6-3.5 6.8-8.5 11z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <div class="p-seek">
+        <div class="seekbar" id="seekbar">
+          <div class="seek-track"><i class="seek-fill" id="seek-fill"></i></div>
+          <div class="seek-thumb" id="seek-thumb"></div>
+        </div>
+        <div class="p-times"><span id="t-cur">0:00</span><span id="t-dur">0:00</span></div>
+      </div>
+
+      <div class="p-controls">
+        <button class="iconbtn ghost" id="btn-shuffle" aria-label="Перемешать">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M16 3h5v5M21 3l-7 7M8 21H3v-5M3 21l7-7M16 21h5v-5M21 21l-7-7M8 3H3v5M3 3l7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="iconbtn big" id="btn-prev" aria-label="Назад">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 5.5v13c0 .8-.9 1.3-1.6.9l-9-6.1a1 1 0 0 1 0-1.7l9-6A1 1 0 0 1 18 5.5z"/><rect x="4.6" y="5" width="2.4" height="14" rx="1.2"/></svg>
+        </button>
+        <button class="play-btn" id="btn-play" aria-label="Play"></button>
+        <button class="iconbtn big" id="btn-next" aria-label="Вперёд">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5.5v13c0 .8.9 1.3 1.6.9l9-6.1a1 1 0 0 0 0-1.7l-9-6A1 1 0 0 0 6 5.5z"/><rect x="17" y="5" width="2.4" height="14" rx="1.2"/></svg>
+        </button>
+        <button class="iconbtn ghost" id="btn-repeat" aria-label="Повтор">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M17 2l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 11v-1a4 4 0 0 1 4-4h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 22l-4-4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 13v1a4 4 0 0 1-4 4H3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <b class="rep-one hidden">1</b>
+        </button>
+      </div>
+
+      <div class="p-extra">
+        <button class="chipbtn active" id="btn-lyrics">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 10h16M4 14h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M4 18h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".5"/></svg>
+          Текст песни
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PERMISSION OVERLAY ============ -->
+  <div id="perm" class="overlay hidden">
+    <div class="perm-card">
+      <div class="empty-art big">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3l8 4v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7l8-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h3>Нужен доступ к файлам</h3>
+      <p>Чтобы ArbMusic нашёл твою музыку, разреши приложению доступ ко всем файлам в настройках и вернись обратно.</p>
+      <button class="btn-grad" id="btn-open-perm">Открыть настройки</button>
+      <button class="btn-ghost" id="btn-perm-later">Позже</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <input type="file" id="dirpick" webkitdirectory multiple hidden>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

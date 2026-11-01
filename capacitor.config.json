@@ -1,0 +1,8 @@
+{
+  "appId": "com.arbuzik.arbmusic",
+  "appName": "ArbMusic",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

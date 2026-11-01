@@ -1,0 +1,45 @@
+{
+  "name": "arbmusic",
+  "version": "1.0.0",
+  "description": "ArbMusic — музыкальный плеер (Android APK, iOS IPA, Windows EXE)",
+  "main": "electron/main.js",
+  "scripts": {
+    "electron": "electron .",
+    "build:win": "electron-builder --win portable",
+    "cap:sync": "cap sync android && cap sync ios"
+  },
+  "author": "arbuzikyt99",
+  "license": "MIT",
+  "dependencies": {
+    "@capacitor/android": "^6.2.3",
+    "@capacitor/cli": "^6.2.3",
+    "@capacitor/core": "^6.2.3",
+    "@capacitor/ios": "^6.2.3",
+    "arbmusic-scanner": "file:plugins/arbmusic-scanner"
+  },
+  "build": {
+    "appId": "com.arbuzik.arbmusic",
+    "productName": "ArbMusic",
+    "directories": {
+      "output": "dist-win"
+    },
+    "files": [
+      "www/**/*",
+      "electron/**/*",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "build/icon.png"
+    },
+    "portable": {
+      "artifactName": "ArbMusic-Portable.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  }
+}
