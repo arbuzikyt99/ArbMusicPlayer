@@ -220,6 +220,9 @@ function rowHTML(t, i) {
       <div class="rartist">${esc(t.artist)}</div>
     </div>
     <span class="rdur" data-id="${esc(t.id)}">${t.dur ? fmt(t.dur) : ''}</span>
+    <button class="rdel" data-del="${esc(t.id)}" data-title="${esc(t.title)}" aria-label="Удалить из базы">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v2M6.5 7l1 12.2A1.5 1.5 0 0 0 9 20.6h6a1.5 1.5 0 0 0 1.5-1.4l1-12.2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
     <button class="rheart ${fav ? 'fav' : ''}" data-id="${esc(t.id)}" aria-label="В избранное">
       <svg viewBox="0 0 24 24" fill="none"><path d="M12 20.7C7 16.5 3.5 13.3 3.5 9.7 3.5 7 5.6 5 8.2 5c1.5 0 3 .7 3.8 2 .8-1.3 2.3-2 3.8-2 2.6 0 4.7 2 4.7 4.7 0 3.6-3.5 6.8-8.5 11z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
     </button>
@@ -318,6 +321,7 @@ async function api(path, opts = {}) {
 /* ---------- профиль ---------- */
 function refreshProfile() {
   const s = session();
+  document.body.classList.toggle('admin', !!(s && s.admin));
   $('#profile-out').classList.toggle('hidden', !!s);
   $('#profile-in').classList.toggle('hidden', !s);
   if (s) {
@@ -914,6 +918,20 @@ function wire() {
   // row clicks (delegation)
   const rowHandler = (container, getList) => {
     container.addEventListener('click', e => {
+      const del = e.target.closest('.rdel');
+      if (del) {
+        e.stopPropagation();
+        if (!session() || !session().admin) return;
+        if (!confirm('Удалить «' + del.dataset.title + '» из общей базы? Он станет недоступен всем пользователям.')) return;
+        api('/api/delete-track', { body: { id: del.dataset.del } }).then(() => {
+          const wasCurrent = current() && current().id === del.dataset.del;
+          if (wasCurrent) { audio.pause(); audio.removeAttribute('src'); }
+          state.favs.delete(del.dataset.del); saveFavs();
+          loadCatalog();
+          toast('Трек удалён из базы');
+        }).catch(err => toast('Ошибка: ' + err.message));
+        return;
+      }
       const heart = e.target.closest('.rheart');
       const row = e.target.closest('.row');
       if (!row) return;

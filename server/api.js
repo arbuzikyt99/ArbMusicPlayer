@@ -418,6 +418,44 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    /* --- админ: удалить трек из общей базы --- */
+    if (p === '/api/delete-track' && req.method === 'POST') {
+      const me = checkToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+      if (!me || !me.admin) return json(res, 403, { error: 'Только для админа' });
+      if (!GH_TOKEN) return json(res, 500, { error: 'Сервер не подключён к GitHub' });
+      const body = JSON.parse((await readBody(req, 1e6)).toString('utf8') || '{}');
+      const id = String(body.id || '');
+      if (!id.startsWith('cloud_')) return json(res, 400, { error: 'Можно удалять только треки общей базы' });
+      const fileName = id.slice('cloud_'.length);
+      let cat = { tracks: [] }, catSha = null;
+      try {
+        const cur = await ghApi(`/repos/${GH_MIRROR_REPO}/contents/catalog.json`);
+        catSha = cur.sha;
+        cat = JSON.parse(Buffer.from(cur.content, 'base64').toString('utf8'));
+      } catch (_) {
+        return json(res, 404, { error: 'Каталог недоступен' });
+      }
+      const entry = (cat.tracks || []).find(t => t.id === id || t.file === fileName);
+      if (!entry) return json(res, 404, { error: 'Трек не найден в каталоге' });
+      // удаляем файлы из репозитория (аудио, обложку, текст)
+      for (const rel of [entry.file, entry.cover, entry.lrc].filter(Boolean)) {
+        try {
+          const cur = await ghApi(`/repos/${GH_MIRROR_REPO}/contents/music/${encodeURIComponent(rel)}`);
+          await ghApi(`/repos/${GH_MIRROR_REPO}/contents/music/${encodeURIComponent(rel)}`, {
+            method: 'DELETE',
+            body: { message: 'Remove track: ' + rel, sha: cur.sha },
+          });
+        } catch (_) { /* файла может не быть — не критично */ }
+      }
+      // обновляем каталог
+      cat.tracks = cat.tracks.filter(t => t.id !== id);
+      cat.updated = new Date().toISOString();
+      const putBody = { message: 'catalog: - ' + fileName, content: Buffer.from(JSON.stringify(cat, null, 2)).toString('base64') };
+      if (catSha) putBody.sha = catSha;
+      await ghApi(`/repos/${GH_MIRROR_REPO}/contents/catalog.json`, { method: 'PUT', body: putBody });
+      return json(res, 200, { ok: true, deleted: fileName });
+    }
+
     /* --- админ: очередь --- */
     if (p === '/api/queue' && req.method === 'GET') {
       const me = checkToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
