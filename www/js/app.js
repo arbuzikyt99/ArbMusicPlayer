@@ -991,6 +991,24 @@ function wire() {
   });
 }
 
+/* ---------- авто-обновление веб-версии ---------- */
+const APP_VER = 4;
+async function checkVersion() {
+  if (isNative || !/^https?:$/.test(location.protocol)) return;
+  try {
+    const r = await fetch('./version.json?cb=' + Date.now(), { cache: 'no-cache' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j.v !== APP_VER && !sessionStorage.getItem('arbmvreload')) {
+      // новая версия на сервере — сбрасываем кэш и перезагружаемся один раз
+      sessionStorage.setItem('arbmvreload', '1');
+      for (const reg of await navigator.serviceWorker.getRegistrations()) await reg.unregister();
+      for (const k of await caches.keys()) await caches.delete(k);
+      location.reload();
+    }
+  } catch (_) { /* ignore */ }
+}
+
 /* ---------- init ---------- */
 async function init() {
   if (!isNative) document.body.classList.add('web');
@@ -1003,6 +1021,7 @@ async function init() {
   renderHome();
   // общий каталог — единственный источник треков, на всех платформах
   loadCatalog();
+  checkVersion();
   // service worker — только для оффлайн-запаса приложения (не в Electron file://)
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
