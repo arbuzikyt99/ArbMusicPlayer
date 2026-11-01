@@ -201,7 +201,6 @@ function main() {
     ['android/app/src/main/res/mipmap-xhdpi/ic_launcher.png', 96],
     ['android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png', 144],
     ['android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png', 192],
-    ['ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png', 1024],
     ['www/icon-192.png', 192],
     ['www/icon-512.png', 512],
   ];

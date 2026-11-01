@@ -1,12 +1,12 @@
 {
   "name": "arbmusic",
   "version": "1.0.0",
-  "description": "ArbMusic — музыкальный плеер (Android APK, iOS IPA, Windows EXE)",
+  "description": "ArbMusic — музыкальный плеер (Android APK, веб для iPhone, Windows EXE)",
   "main": "electron/main.js",
   "scripts": {
     "electron": "electron .",
-    "build:win": "electron-builder --win portable",
-    "cap:sync": "cap sync android && cap sync ios"
+    "build:win": "electron-builder --win nsis",
+    "cap:sync": "cap sync android"
   },
   "author": "arbuzikyt99",
   "license": "MIT",
@@ -28,12 +28,16 @@
     ],
     "win": {
       "target": [
-        "portable"
+        "nsis"
       ],
       "icon": "build/icon.png"
     },
-    "portable": {
-      "artifactName": "ArbMusic-Portable.exe"
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "ArbMusic-Setup.exe",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
     }
   },
   "devDependencies": {
