@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-01T22:32:19.924Z",
+  "updated": "2026-11-01T22:34:09.469Z",
   "tracks": [
     {
       "id": "cloud_Арбузик - Мадам.mp3",
@@ -13,15 +13,6 @@
       "file": "4k feat. ChipaChip - В белом платье 2.mp3",
       "title": "В белом платье 2",
       "artist": "4k feat. ChipaChip",
-      "lrc": null,
-      "cover": null
-    },
-    {
-      "id": "cloud_OwnerArtist - Owner Test.mp3",
-      "file": "OwnerArtist - Owner Test.mp3",
-      "title": "Owner Test",
-      "artist": "OwnerArtist",
-      "by": "ownertest",
       "lrc": null,
       "cover": null
     }
