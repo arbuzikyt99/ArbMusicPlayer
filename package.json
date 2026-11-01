@@ -33,11 +33,16 @@
       "icon": "build/icon.png"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
       "artifactName": "ArbMusic-Setup.exe",
       "deleteAppDataOnUninstall": false,
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "installerLanguages": ["ru-RU", "en-US"],
+      "uninstallDisplayName": "ArbMusic"
     }
   },
   "devDependencies": {

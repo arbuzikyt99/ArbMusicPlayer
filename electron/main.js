@@ -1,10 +1,17 @@
-/* ArbMusic — Electron main process (Windows build) */
+/* ArbMusic — Electron main process (Windows build).
+   Интерфейс всегда свежий: грузим с сервера, при отсутствии сети — встроенная копия. */
 'use strict';
 const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
 
+const REMOTE_URL = 'https://arbuzikyt99.github.io/ArbMusicPlayer/';
+const LOCAL_FILE = path.join(__dirname, '..', 'www', 'index.html');
+
+let win = null;
+let fellBackToLocal = false;
+
 function createWindow() {
-  const win = new BrowserWindow({
+  win = new BrowserWindow({
     width: 430,
     height: 900,
     minWidth: 360,
@@ -20,13 +27,30 @@ function createWindow() {
     },
   });
   win.setMenuBarVisibility(false);
-  win.loadFile(path.join(__dirname, '..', 'www', 'index.html'));
-  // внешние ссылки — в системный браузер
+  loadRemote();
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
   });
 }
+
+function loadRemote() {
+  // Service worker сайта сам отдаёт кэш, когда нет сети
+  win.webContents.once('did-fail-load', (e, code, desc, url, isMainFrame) => {
+    if (isMainFrame && !fellBackToLocal) {
+      fellBackToLocal = true;
+      win.loadFile(LOCAL_FILE).catch(() => {});
+    }
+  });
+  win.loadURL(REMOTE_URL).catch(() => {
+    if (!fellBackToLocal) {
+      fellBackToLocal = true;
+      win.loadFile(LOCAL_FILE).catch(() => {});
+    }
+  });
+}
+
+app.setAppUserModelId('com.arbuzik.arbmusic');
 
 app.whenReady().then(() => {
   createWindow();

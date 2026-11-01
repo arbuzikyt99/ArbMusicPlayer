@@ -3,6 +3,7 @@
   "appName": "ArbMusic",
   "webDir": "www",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "url": "https://arbuzikyt99.github.io/ArbMusicPlayer/"
   }
 }
