@@ -163,9 +163,9 @@ public class ArbMusicScannerPlugin: CAPPlugin, CAPBridgedPlugin {
                     if ln == "\(base).lrc" || ln == "\(base).txt" {
                         let url = dir.appendingPathComponent(n)
                         if let data = try? Data(contentsOf: url) {
-                            let text = String(data: data, encoding: .utf8)
-                                ?? String(data: data, encoding: String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.windowsCP1251.rawValue))))
-                                ?? ""
+                            // 0x04CC = kCFStringEncodingWindowsCyrillic (windows-1251)
+                            let win1251 = String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(0x04CC))
+                            let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: win1251) ?? ""
                             if !text.isEmpty { result["lyrics"] = text; break }
                         }
                     }

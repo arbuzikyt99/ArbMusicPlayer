@@ -14,4 +14,4 @@ ios/DerivedData/
 test-music/
 ArbMusic.apk
 dist/
-electron/
+electron/dist-win/
