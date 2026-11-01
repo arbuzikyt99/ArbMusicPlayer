@@ -302,14 +302,20 @@ const MUSIC_BASE = 'https://raw.githubusercontent.com/arbuzikyt99/ArbMusicPlayer
 
 async function loadCatalog() {
   let data = null;
+  // свежий каталог через GitHub API (без CDN-кэша), потом raw, потом офлайн-копия
   try {
-    const r = await fetch(CATALOG_URL, { cache: 'no-cache' });
-    if (r.ok) {
-      data = await r.json();
-      try { localStorage.setItem('arbmusic.catalog', JSON.stringify(data)); } catch (_) { /* ignore */ }
-    }
-  } catch (_) { /* оффлайн — берём сохранённую копию */ }
+    const r = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/catalog.json`, { headers: { Accept: 'application/vnd.github+json' } });
+    if (r.ok) data = b64ToJSON((await r.json()).content);
+  } catch (_) { /* ignore */ }
   if (!data) {
+    try {
+      const r = await fetch(CATALOG_URL, { cache: 'no-cache' });
+      if (r.ok) data = await r.json();
+    } catch (_) { /* offline */ }
+  }
+  if (data) {
+    try { localStorage.setItem('arbmusic.catalog', JSON.stringify(data)); } catch (_) { /* ignore */ }
+  } else {
     try { data = JSON.parse(localStorage.getItem('arbmusic.catalog') || 'null'); } catch (_) { /* ignore */ }
   }
   if (!data || !Array.isArray(data.tracks)) return;
@@ -410,8 +416,296 @@ function getListForView() {
 function showView(name) {
   state.view = name;
   $$('.view').forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
+  const navMap = { home: 'home', search: 'search', list: 'favs', profile: 'profile' };
+  const navKey = navMap[name] || 'home';
+  $$('.hb-btn').forEach(b => b.classList.toggle('active', b.dataset.nav === navKey));
   if (name === 'list') renderListView();
-  if (name === 'search') { renderSearch($('#search-input').value); if (!isNative) return; }
+  if (name === 'search') renderSearch($('#search-input').value);
+  if (name === 'profile') refreshProfile();
+}
+
+/* ================= API / аккаунты / модерация ================= */
+const API_URL = 'https://arbmusic-7371.zai-ai.site';
+const GH_REPO = 'arbuzikyt99/ArbMusicPlayer';
+const ADMIN_LOGIN = 'arbuzikyt99';
+
+function session() {
+  try { return JSON.parse(localStorage.getItem('arbmusic.session') || 'null'); } catch (_) { return null; }
+}
+function setSession(s) {
+  if (s) localStorage.setItem('arbmusic.session', JSON.stringify(s));
+  else localStorage.removeItem('arbmusic.session');
+}
+async function api(path, opts = {}) {
+  const s = session();
+  const init = { method: opts.method || (opts.body ? 'POST' : 'GET'), headers: {} };
+  if (s && !opts.noAuth) init.headers.Authorization = 'Bearer ' + s.token;
+  if (opts.body instanceof FormData) init.body = opts.body;
+  else if (opts.body != null) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
+  const r = await fetch(API_URL + path, init);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || 'Ошибка ' + r.status);
+  return d;
+}
+
+/* ---------- профиль ---------- */
+function refreshProfile() {
+  const s = session();
+  $('#profile-out').classList.toggle('hidden', !!s);
+  $('#profile-in').classList.toggle('hidden', !s);
+  if (s) {
+    $('#profile-name').textContent = s.name;
+    $('#profile-avatar').textContent = (s.name[0] || 'A').toUpperCase();
+    $('#profile-admin-badge').classList.toggle('hidden', !s.admin);
+    $('#btn-admin').classList.toggle('hidden', !s.admin);
+  }
+}
+
+/* ---------- модалки ---------- */
+function openModal(id) { $('#' + id).classList.add('show'); }
+function closeModal(id) { $('#' + id).classList.remove('show'); }
+
+/* ---------- авторизация ---------- */
+let authTab = 'login';
+function wireAuth() {
+  $$('.tab').forEach(t => t.addEventListener('click', () => {
+    authTab = t.dataset.tab;
+    $$('.tab').forEach(x => x.classList.toggle('active', x === t));
+    $('#auth-submit').textContent = authTab === 'login' ? 'Войти' : 'Создать аккаунт';
+  }));
+  $('#btn-open-auth').addEventListener('click', () => {
+    $('#auth-err').classList.add('hidden');
+    openModal('modal-auth');
+  });
+  $('#auth-submit').addEventListener('click', async () => {
+    const err = $('#auth-err');
+    err.classList.add('hidden');
+    try {
+      const d = await api('/api/' + (authTab === 'login' ? 'login' : 'register'), {
+        body: { username: $('#auth-name').value.trim(), password: $('#auth-pass').value },
+      });
+      setSession({ token: d.token, name: d.name, admin: d.admin });
+      closeModal('modal-auth');
+      refreshProfile();
+      toast(authTab === 'login' ? `С возвращением, ${d.name}!` : `Аккаунт создан, ${d.name}!`);
+    } catch (e) {
+      err.textContent = e.message;
+      err.classList.remove('hidden');
+    }
+  });
+  $('#btn-logout').addEventListener('click', () => {
+    setSession(null);
+    refreshProfile();
+    toast('Вышел из аккаунта');
+  });
+  $$('.modal').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('show'); }));
+  $$('[data-close]').forEach(b => b.addEventListener('click', () => closeModal(b.dataset.close)));
+}
+
+/* ---------- загрузка трека на модерацию ---------- */
+let upAudio = null, upLrc = null;
+function wireUpload() {
+  $('#btn-upload-track').addEventListener('click', () => {
+    if (!session()) { openModal('modal-auth'); return; }
+    upAudio = upLrc = null;
+    $('#upload-audio-name').textContent = 'Выбрать аудиофайл';
+    $('#upload-lrc-name').textContent = 'Текст песни .lrc (необязательно)';
+    $('#upload-audio-btn').classList.remove('filled');
+    $('#upload-lrc-btn').classList.remove('filled');
+    $('#upload-title').value = '';
+    $('#upload-artist').value = '';
+    $('#upload-err').classList.add('hidden');
+    openModal('modal-upload');
+  });
+  $('#upload-audio-btn').addEventListener('click', () => $('#upload-audio').click());
+  $('#upload-lrc-btn').addEventListener('click', () => $('#upload-lrc').click());
+  $('#upload-audio').addEventListener('change', e => {
+    upAudio = e.target.files[0] || null;
+    if (upAudio) {
+      $('#upload-audio-name').textContent = upAudio.name + ' · ' + (upAudio.size / 1048576).toFixed(1) + ' МБ';
+      $('#upload-audio-btn').classList.add('filled');
+      const pn = parseName(upAudio.name);
+      if (!$('#upload-title').value) $('#upload-title').value = pn.title;
+      if (!$('#upload-artist').value && pn.artist !== 'Неизвестный исполнитель') $('#upload-artist').value = pn.artist;
+    }
+  });
+  $('#upload-lrc').addEventListener('change', e => {
+    upLrc = e.target.files[0] || null;
+    $('#upload-lrc-name').textContent = upLrc ? upLrc.name : 'Текст песни .lrc (необязательно)';
+    $('#upload-lrc-btn').classList.toggle('filled', !!upLrc);
+  });
+  $('#upload-submit').addEventListener('click', async () => {
+    const err = $('#upload-err');
+    err.classList.add('hidden');
+    if (!upAudio) { err.textContent = 'Выбери аудиофайл'; err.classList.remove('hidden'); return; }
+    if (!session()) { err.textContent = 'Сессия истекла — войди заново'; err.classList.remove('hidden'); return; }
+    const btn = $('#upload-submit');
+    btn.disabled = true; btn.textContent = 'Загружаю…';
+    try {
+      const fd = new FormData();
+      fd.append('file', upAudio, upAudio.name);
+      if (upLrc) fd.append('lrc', upLrc, upLrc.name);
+      fd.append('title', $('#upload-title').value.trim() || parseName(upAudio.name).title);
+      fd.append('artist', $('#upload-artist').value.trim() || session().name);
+      await api('/api/upload', { body: fd });
+      closeModal('modal-upload');
+      toast('Трек отправлен на модерацию ✅');
+    } catch (e) {
+      err.textContent = e.message;
+      err.classList.remove('hidden');
+    }
+    btn.disabled = false; btn.textContent = 'Отправить на модерацию';
+  });
+}
+
+/* ---------- админ-панель ---------- */
+function ghKey() { return localStorage.getItem('arbmusic.ghkey') || ''; }
+
+function bytesToB64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  const CH = 0x8000;
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return btoa(bin);
+}
+async function gh(path, opts = {}) {
+  const r = await fetch('https://api.github.com' + path, {
+    method: opts.method || 'GET',
+    headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + ghKey() },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  if (!r.ok) throw new Error('GitHub ' + r.status + ': ' + (await r.text()).slice(0, 140));
+  return r.status === 204 ? null : r.json();
+}
+function b64ToJSON(b64) {
+  return JSON.parse(decodeURIComponent(escape(atob(b64.replace(/\n/g, '')))));
+}
+function jsonToB64(obj) {
+  return btoa(unescape(encodeURIComponent(JSON.stringify(obj, null, 2))));
+}
+
+/* одобрить: аудио с API → коммит в репозиторий → обновление каталога → снятие с очереди */
+async function approveTrack(item) {
+  toast('Публикую: ' + item.title + '…');
+  const fileName = `${item.artist} - ${item.title}.${item.ext}`.replace(/[\\/:*?"<>|]/g, '_').trim();
+  const files = [{ path: 'music/' + fileName, content: await (await fetch(API_URL + '/audio/' + item.id)).arrayBuffer() }];
+  if (item.lrc) files.push({ path: 'music/' + fileName.replace(/\.[^.]+$/, '.lrc'), content: item.lrc });
+
+  const treeItems = [];
+  for (const f of files) {
+    const b = await gh(`/repos/${GH_REPO}/git/blobs`, { method: 'POST', body: { content: bytesToB64(f.content), encoding: 'base64' } });
+    treeItems.push({ path: f.path, mode: '100644', type: 'blob', sha: b.sha });
+  }
+  const ref = await gh(`/repos/${GH_REPO}/git/ref/heads/main`);
+  const commit = await gh(`/repos/${GH_REPO}/git/commits/${ref.object.sha}`);
+  const baseTree = await gh(`/repos/${GH_REPO}/git/trees/${commit.tree.sha}`);
+  const newTree = await gh(`/repos/${GH_REPO}/git/trees`, { method: 'POST', body: { base_tree: baseTree.sha, tree: treeItems } });
+  const newCommit = await gh(`/repos/${GH_REPO}/git/commits`, { method: 'POST', body: { message: 'Add track: ' + fileName, tree: newTree.sha, parents: [ref.object.sha] } });
+  await gh(`/repos/${GH_REPO}/git/refs/heads/main`, { method: 'PATCH', body: { sha: newCommit.sha, force: false } });
+
+  let cat = { updated: new Date().toISOString(), tracks: [] };
+  let catSha = null;
+  try {
+    const cur = await gh(`/repos/${GH_REPO}/contents/catalog.json`);
+    catSha = cur.sha;
+    cat = b64ToJSON(cur.content);
+  } catch (_) { /* нет каталога — создадим */ }
+  cat.tracks = cat.tracks || [];
+  cat.tracks.push({ id: 'cloud_' + fileName, file: fileName, title: item.title, artist: item.artist, lrc: item.lrc ? fileName.replace(/\.[^.]+$/, '.lrc') : null });
+  cat.updated = new Date().toISOString();
+  const putBody = { message: 'catalog: + ' + fileName, content: jsonToB64(cat) };
+  if (catSha) putBody.sha = catSha;
+  await gh(`/repos/${GH_REPO}/contents/catalog.json`, { method: 'PUT', body: putBody });
+
+  await api('/api/moderate', { body: { id: item.id, action: 'approve' } });
+}
+
+function adminItemHTML(t) {
+  const mb = (t.size / 1048576).toFixed(1);
+  return `<div class="admin-item" data-id="${esc(t.id)}">
+    <div class="thumb" style="background:${gradFor({ id: t.id })}">${NOTE_SVG}</div>
+    <div class="ameta"><b>${esc(t.title)}</b><span>${esc(t.artist)} · от ${esc(t.by)} · ${mb} МБ</span></div>
+    <button class="abtn play" title="Послушать"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.4v13.2c0 .8.9 1.3 1.6.9l10-6.6a1.06 1.06 0 0 0 0-1.8l-10-6.6c-.7-.5-1.6 0-1.6.9z"/></svg></button>
+    <button class="abtn ok" title="Одобрить"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <button class="abtn no" title="Отклонить"><svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+  </div>`;
+}
+
+async function loadAdminQueue() {
+  const box = $('#admin-queue');
+  box.innerHTML = '<div class="admin-spin">Загружаю очередь…</div>';
+  $('#admin-empty').classList.add('hidden');
+  try {
+    const d = await api('/api/queue');
+    box.innerHTML = d.items.map(adminItemHTML).join('');
+    $('#admin-empty').classList.toggle('hidden', d.items.length > 0);
+  } catch (e) {
+    box.innerHTML = `<div class="admin-spin">${esc(e.message)}</div>`;
+  }
+}
+
+function wireAdmin() {
+  $('#btn-admin').addEventListener('click', () => {
+    const hasKey = !!ghKey();
+    $('#admin-key-box').classList.toggle('hidden', hasKey);
+    $('#admin-panel-box').classList.toggle('hidden', !hasKey);
+    openModal('modal-admin');
+    if (hasKey) loadAdminQueue();
+  });
+  $('#admin-key-save').addEventListener('click', async () => {
+    const err = $('#admin-err');
+    err.classList.add('hidden');
+    const key = $('#admin-key').value.trim();
+    try {
+      const r = await fetch('https://api.github.com/user', { headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + key } });
+      if (!r.ok) throw new Error('Токен не подошёл (' + r.status + ')');
+      const u = await r.json();
+      if (u.login.toLowerCase() !== ADMIN_LOGIN) throw new Error('Это токен другого аккаунта');
+      localStorage.setItem('arbmusic.ghkey', key);
+      $('#admin-key-box').classList.add('hidden');
+      $('#admin-panel-box').classList.remove('hidden');
+      loadAdminQueue();
+    } catch (e) {
+      err.textContent = e.message;
+      err.classList.remove('hidden');
+    }
+  });
+  $('#admin-refresh').addEventListener('click', loadAdminQueue);
+  $('#admin-queue').addEventListener('click', async e => {
+    const el = e.target.closest('.admin-item');
+    if (!el) return;
+    const id = el.dataset.id;
+    const items = (await api('/api/queue').catch(() => ({ items: [] }))).items;
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    if (e.target.closest('.play')) {
+      const t = { id: 'mod_' + id, url: API_URL + '/audio/' + id, title: item.title, artist: item.artist + ' · модерация', album: '', dur: 0, ext: item.ext };
+      playList([t], 0);
+      openPlayer();
+      return;
+    }
+    if (e.target.closest('.no')) {
+      if (!confirm('Отклонить трек «' + item.title + '»?')) return;
+      await api('/api/moderate', { body: { id, action: 'reject' } });
+      loadAdminQueue();
+      toast('Трек отклонён');
+      return;
+    }
+    if (e.target.closest('.ok')) {
+      const btn = e.target.closest('.ok');
+      btn.disabled = true;
+      try {
+        await approveTrack(item);
+        toast('Опубликован в общей базе ✅');
+        loadAdminQueue();
+        loadCatalog();
+      } catch (err) {
+        toast('Ошибка: ' + err.message);
+        btn.disabled = false;
+      }
+    }
+  });
 }
 
 /* ---------- queue & playback ---------- */
@@ -772,13 +1066,21 @@ function wire() {
     playList(state.tracks, 0, { shuffle: true, keepFirst: true });
     openPlayer();
   });
-  $('#card-favs').addEventListener('click', () => {
-    state.listKind = 'favs'; showView('list');
-  });
   $('#btn-search').addEventListener('click', () => {
     showView('search');
     setTimeout(() => $('#search-input').focus(), 250);
   });
+  // hotbar
+  $$('.hb-btn').forEach(b => b.addEventListener('click', () => {
+    const n = b.dataset.nav;
+    if (n === 'home') showView('home');
+    else if (n === 'search') { showView('search'); setTimeout(() => $('#search-input').focus(), 250); }
+    else if (n === 'favs') { state.listKind = 'favs'; showView('list'); }
+    else if (n === 'profile') showView('profile');
+  }));
+  wireAuth();
+  wireUpload();
+  wireAdmin();
   $('#btn-pick-folder').addEventListener('click', pickFolder);
   $('#dirpick').addEventListener('change', onDirPicked);
   $('#filepick').addEventListener('change', onDirPicked);
@@ -929,6 +1231,7 @@ async function init() {
   updateRepeatUI();
   updatePlayUI();
   refreshFavUI();
+  refreshProfile();
   renderHome();
   // общий каталог — на всех платформах
   loadCatalog();
