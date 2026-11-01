@@ -168,7 +168,9 @@ section.view.active { opacity: 1; pointer-events: auto; transform: none; z-index
 .rdel { width: 30px; height: 34px; display: none; place-items: center; color: var(--dim); flex-shrink: 0; border-radius: 50%; }
 .rdel svg { width: 16px; height: 16px; }
 .rdel:hover { color: #f87171; }
-body.admin .rdel { display: grid; }
+body.admin .rdel:not([hidden]) { display: grid; }
+#mini-del { width: 34px; height: 34px; }
+#p-del { width: 42px; height: 42px; }
 
 /* equalizer on playing row */
 .eq { position: absolute; inset: 0; display: none; align-items: flex-end; justify-content: center; gap: 3px; padding-bottom: 30%; background: rgba(7, 7, 12, .45); }

@@ -93,6 +93,37 @@ function trackUrl(t) {
 function saveFavs() {
   localStorage.setItem('arbmusic.favs', JSON.stringify([...state.favs]));
 }
+
+/* корзина админа: мини-плеер + полный плеер (только для треков общей базы) */
+function updateDeleteButtons() {
+  const s = session();
+  const isAdmin = !!(s && s.admin);
+  const t = current();
+  const can = isAdmin && t && t.id && t.id.startsWith('cloud_');
+  for (const el of [$('#mini-del'), $('#p-del')]) {
+    if (!el) continue;
+    el.hidden = !can;
+    if (can) { el.dataset.del = t.id; el.dataset.title = t.title; }
+  }
+}
+
+function deleteTrackFlow(id, title) {
+  if (!confirm('Удалить «' + title + '» из общей базы? Он станет недоступен всем пользователям.')) return;
+  api('/api/delete-track', { body: { id } }).then(() => {
+    const wasCurrent = current() && current().id === id;
+    if (wasCurrent) {
+      audio.pause();
+      audio.removeAttribute('src');
+      $('#mini').classList.remove('up');
+      closePlayer();
+    }
+    state.favs.delete(id); saveFavs();
+    loadCatalog();
+    updateDeleteButtons();
+    toast('Трек удалён из базы');
+  }).catch(err => toast('Ошибка: ' + err.message));
+}
+
 function toggleFav(id) {
   if (!session()) {
     toast('Войди, чтобы сохранять треки');
@@ -323,6 +354,7 @@ function refreshProfile() {
   const s = session();
   document.body.classList.toggle('admin', !!(s && s.admin));
   $('#profile-out').classList.toggle('hidden', !!s);
+  updateDeleteButtons();
   $('#profile-in').classList.toggle('hidden', !s);
   if (s) {
     $('#profile-name').textContent = s.name;
@@ -483,6 +515,16 @@ async function loadAdminQueue() {
 }
 
 function wireAdmin() {
+  $('#mini-del').addEventListener('click', e => {
+    e.stopPropagation();
+    const el = e.currentTarget;
+    if (el.dataset.del) deleteTrackFlow(el.dataset.del, el.dataset.title);
+  });
+  $('#p-del').addEventListener('click', e => {
+    e.stopPropagation();
+    const el = e.currentTarget;
+    if (el.dataset.del) deleteTrackFlow(el.dataset.del, el.dataset.title);
+  });
   $('#btn-admin').addEventListener('click', () => {
     openModal('modal-admin');
     loadAdminQueue();
@@ -604,6 +646,7 @@ function onTrackChanged(t) {
   updatePlayUI();
   markPlaying();
   refreshFavUI();
+  updateDeleteButtons();
   updateMediaSession(t);
   // lazy duration probe for web
   if (!isNative) probeDuration(t);
@@ -922,14 +965,7 @@ function wire() {
       if (del) {
         e.stopPropagation();
         if (!session() || !session().admin) return;
-        if (!confirm('Удалить «' + del.dataset.title + '» из общей базы? Он станет недоступен всем пользователям.')) return;
-        api('/api/delete-track', { body: { id: del.dataset.del } }).then(() => {
-          const wasCurrent = current() && current().id === del.dataset.del;
-          if (wasCurrent) { audio.pause(); audio.removeAttribute('src'); }
-          state.favs.delete(del.dataset.del); saveFavs();
-          loadCatalog();
-          toast('Трек удалён из базы');
-        }).catch(err => toast('Ошибка: ' + err.message));
+        deleteTrackFlow(del.dataset.del, del.dataset.title);
         return;
       }
       const heart = e.target.closest('.rheart');
@@ -956,7 +992,7 @@ function wire() {
 
   // mini
   $('#mini').addEventListener('click', e => {
-    if (e.target.closest('.iconbtn')) return;
+    if (e.target.closest('.iconbtn') || e.target.closest('.rdel')) return;
     openPlayer();
   });
   $('#mini-play').addEventListener('click', togglePlay);

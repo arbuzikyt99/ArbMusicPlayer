@@ -1,14 +1,39 @@
 /* ArbMusic — Electron main process (Windows build).
-   Интерфейс всегда свежий: грузим с сервера, при отсутствии сети — встроенная копия. */
+   Запуск мгновенный: сразу открываем встроенную версию,
+   затем, если сервер доступен, переключаемся на неё —
+   так интерфейс всегда свежий без переустановок. */
 'use strict';
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, net } = require('electron');
 const path = require('path');
 
 const REMOTE_URL = 'https://arbuzikyt99.github.io/ArbMusicPlayer/';
 const LOCAL_FILE = path.join(__dirname, '..', 'www', 'index.html');
 
 let win = null;
-let fellBackToLocal = false;
+let usingRemote = false;
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  // уже запущено — показываем существующее окно
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+  });
+
+  app.setAppUserModelId('com.arbuzik.arbmusic');
+
+  app.whenReady().then(() => {
+    createWindow();
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -19,6 +44,7 @@ function createWindow() {
     title: 'ArbMusic',
     backgroundColor: '#07070c',
     autoHideMenuBar: true,
+    show: false,
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       contextIsolation: true,
@@ -27,37 +53,44 @@ function createWindow() {
     },
   });
   win.setMenuBarVisibility(false);
-  loadRemote();
+  // мгновенный старт на встроенной версии
+  win.loadFile(LOCAL_FILE).catch(() => {});
+  win.once('ready-to-show', () => {
+    win.show();
+    probeRemote();
+  });
+  win.webContents.on('did-fail-load', (e, code, desc, url, isMainFrame) => {
+    if (isMainFrame && usingRemote) backToLocal();
+  });
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
   });
 }
 
-function loadRemote() {
-  // Service worker сайта сам отдаёт кэш, когда нет сети
-  win.webContents.once('did-fail-load', (e, code, desc, url, isMainFrame) => {
-    if (isMainFrame && !fellBackToLocal) {
-      fellBackToLocal = true;
-      win.loadFile(LOCAL_FILE).catch(() => {});
-    }
-  });
-  win.loadURL(REMOTE_URL).catch(() => {
-    if (!fellBackToLocal) {
-      fellBackToLocal = true;
-      win.loadFile(LOCAL_FILE).catch(() => {});
-    }
-  });
+function probeRemote() {
+  try {
+    const req = net.request(REMOTE_URL);
+    let settled = false;
+    const finish = ok => {
+      if (settled) return;
+      settled = true;
+      if (ok && win && !win.isDestroyed()) {
+        usingRemote = true;
+        win.loadURL(REMOTE_URL).catch(() => backToLocal());
+      }
+    };
+    req.setTimeout(5000, () => { req.abort(); finish(false); });
+    req.on('response', res => finish(res.statusCode >= 200 && res.statusCode < 400));
+    req.on('error', () => finish(false));
+    req.end();
+  } catch (_) { /* остаёмся на локальной */ }
 }
 
-app.setAppUserModelId('com.arbuzik.arbmusic');
-
-app.whenReady().then(() => {
-  createWindow();
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
+function backToLocal() {
+  usingRemote = false;
+  if (win && !win.isDestroyed()) win.loadFile(LOCAL_FILE).catch(() => {});
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
