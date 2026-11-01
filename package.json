@@ -14,7 +14,6 @@
     "@capacitor/android": "^6.2.3",
     "@capacitor/cli": "^6.2.3",
     "@capacitor/core": "^6.2.3",
-    "@capacitor/ios": "^6.2.3",
     "arbmusic-scanner": "file:plugins/arbmusic-scanner"
   },
   "build": {
