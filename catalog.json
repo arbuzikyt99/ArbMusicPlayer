@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-01T12:55:29.061Z",
+  "updated": "2026-11-01T13:09:45.359Z",
   "tracks": [
     {
       "id": "cloud_ArbDJ - Deep Bass.wav",
@@ -35,6 +35,14 @@
       "title": "Мадам",
       "artist": "Арбузик",
       "lrc": null
+    },
+    {
+      "id": "cloud_TestBot - Обложка Тест.wav",
+      "file": "TestBot - Обложка Тест.wav",
+      "title": "Обложка Тест",
+      "artist": "TestBot",
+      "lrc": null,
+      "cover": "covers/TestBot - Обложка Тест.png"
     }
   ]
 }
