@@ -168,7 +168,7 @@ section.view.active { opacity: 1; pointer-events: auto; transform: none; z-index
 .rdel { width: 30px; height: 34px; display: none; place-items: center; color: var(--dim); flex-shrink: 0; border-radius: 50%; }
 .rdel svg { width: 16px; height: 16px; }
 .rdel:hover { color: #f87171; }
-body.admin .rdel:not([hidden]) { display: grid; }
+.rdel:not([hidden]) { display: grid; }
 #mini-del { width: 34px; height: 34px; }
 #p-del { width: 42px; height: 42px; }
 

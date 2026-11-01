@@ -117,6 +117,7 @@ async function publishTrackServer(item) {
   if (!cat.tracks.some(t => t.id === 'cloud_' + fileName)) {
     cat.tracks.push({
       id: 'cloud_' + fileName, file: fileName, title: item.title, artist: item.artist,
+      by: item.by || null,
       lrc: item.lrc ? fileName.replace(/\.[^.]+$/, '.lrc') : null,
       cover: coverRel,
     });
@@ -437,6 +438,11 @@ const server = http.createServer(async (req, res) => {
       }
       const entry = (cat.tracks || []).find(t => t.id === id || t.file === fileName);
       if (!entry) return json(res, 404, { error: 'Трек не найден в каталоге' });
+      // удалять может админ ИЛИ автор трека
+      const isOwner = !!(entry.by && me.name && entry.by.toLowerCase() === me.name.toLowerCase());
+      if (!me.admin && !isOwner) {
+        return json(res, 403, { error: 'Удалять может только админ или автор трека' });
+      }
       // удаляем файлы из репозитория (аудио, обложку, текст)
       for (const rel of [entry.file, entry.cover, entry.lrc].filter(Boolean)) {
         try {
