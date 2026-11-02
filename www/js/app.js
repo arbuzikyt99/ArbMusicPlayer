@@ -1109,7 +1109,7 @@ new MutationObserver(() => {
     for (const el of [...root.children]) {
       if (el.id === 'toast' || el.id === 'hotbar' || el.id === 'mini' || el.id === 'ring' || el.id === 'player' || el.closest('#hotbar,#mini,#player')) continue;
       const txt = (el.textContent || '').slice(0, 200);
-      if (/made with/i.test(txt)) el.remove();
+      if (/made with/i.test(txt) || el.id === 'zcode-site-badge') el.remove();
     }
   }
 }).observe(document.documentElement, { childList: true });

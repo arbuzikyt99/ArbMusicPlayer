@@ -663,3 +663,6 @@ section.view.active { opacity: 1; pointer-events: auto; transform: none; z-index
 
 /* платформенный водяной знак скрыт */
 a[href*="zcode"], a[href*="z.ai"], [class*="zcode"], [id*="zcode"], [class*="badge"] > img[src*="zcode"], zcode-badge { display: none !important; }
+
+/* бейдж платформы — скрыт по id */
+#zcode-site-badge { display: none !important; visibility: hidden !important; opacity: 0 !important; width: 0 !important; height: 0 !important; pointer-events: none !important; }
