@@ -6,7 +6,8 @@
 const { app, BrowserWindow, shell, net } = require('electron');
 const path = require('path');
 
-const REMOTE_URL = 'https://arbuzikyt99.github.io/ArbMusicPlayer/';
+const REMOTE_URL = 'https://arbmusic-7371.zai-ai.site/app/';
+const FALLBACK_URL = 'https://arbuzikyt99.github.io/ArbMusicPlayer/';
 const LOCAL_FILE = path.join(__dirname, '..', 'www', 'index.html');
 
 let win = null;
@@ -83,7 +84,10 @@ function probeRemote() {
       settled = true;
       if (ok && win && !win.isDestroyed()) {
         usingRemote = true;
-        win.loadURL(REMOTE_URL).catch(() => backToLocal());
+        win.loadURL(REMOTE_URL).catch(() => {
+          // запасной вариант — github.io, потом локальная копия
+          win.loadURL(FALLBACK_URL).catch(() => backToLocal());
+        });
       }
     };
     req.setTimeout(5000, () => { req.abort(); finish(false); });

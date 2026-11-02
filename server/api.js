@@ -291,6 +291,32 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, data);
     }
 
+    /* --- интерфейс приложения (надёжный хостинг без лимитов) --- */
+    if (p === '/app' || p.startsWith('/app/')) {
+      const WWW = path.join(__dirname, 'www');
+      let rel = p === '/app' || p === '/app/' ? 'index.html' : decodeURIComponent(p.slice('/app/'.length));
+      let file = path.join(WWW, rel);
+      if (!file.startsWith(WWW)) { res.writeHead(403); return res.end(); }
+      const serve = (f) => {
+        const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon' };
+        const data = fs.readFileSync(f);
+        res.writeHead(200, {
+          'Content-Type': MIME[path.extname(f).toLowerCase()] || 'application/octet-stream',
+          'Content-Length': data.length,
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'no-cache',
+        });
+        res.end(data);
+      };
+      try {
+        if (fs.existsSync(file) && fs.statSync(file).isFile()) return serve(file);
+        // SPA: неизвестный путь → index.html
+        return serve(path.join(WWW, 'index.html'));
+      } catch (_) {
+        return json(res, 404, { error: 'not found' });
+      }
+    }
+
     /* health */
     if (p === '/' || p === '/api/health') return json(res, 200, { ok: true, service: 'arbmusic-api', time: Date.now() });
 
