@@ -660,3 +660,6 @@ section.view.active { opacity: 1; pointer-events: auto; transform: none; z-index
 
 /* бирюза в active-состояниях поля — как фокус iOS */
 .field:focus { border-color: rgba(160, 140, 255, .65) !important; box-shadow: 0 0 0 3px rgba(139, 92, 246, .25) !important; }
+
+/* платформенный водяной знак скрыт */
+a[href*="zcode"], a[href*="z.ai"], [class*="zcode"], [id*="zcode"], [class*="badge"] > img[src*="zcode"], zcode-badge { display: none !important; }

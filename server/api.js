@@ -292,9 +292,15 @@ const server = http.createServer(async (req, res) => {
     }
 
     /* --- интерфейс приложения (надёжный хостинг без лимитов) --- */
-    if (p === '/app' || p.startsWith('/app/')) {
+    if (p === '/app' || p.startsWith('/app/') || p === '/' || p === '/index.html' || p === '/sw.js' ||
+        p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/icon-') || p === '/manifest.webmanifest') {
       const WWW = path.join(__dirname, 'www');
-      let rel = p === '/app' || p === '/app/' ? 'index.html' : decodeURIComponent(p.slice('/app/'.length));
+      let rel;
+      if (p === '/app' || p === '/app/') rel = 'index.html';
+      else if (p.startsWith('/app/')) rel = decodeURIComponent(p.slice('/app/'.length));
+      else if (p === '/sw.js') rel = 'sw.js';
+      else if (p === '/' || p === '/index.html') rel = 'index.html';
+      else rel = p.slice(1);
       let file = path.join(WWW, rel);
       if (!file.startsWith(WWW)) { res.writeHead(403); return res.end(); }
       const serve = (f) => {
