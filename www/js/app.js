@@ -1084,7 +1084,7 @@ function wire() {
 }
 
 /* ---------- авто-обновление веб-версии ---------- */
-const APP_VER = 5;
+const APP_VER = 6;
 async function checkVersion() {
   if (isNative || !/^https?:$/.test(location.protocol)) return;
   try {
