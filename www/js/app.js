@@ -364,7 +364,16 @@ async function api(path, opts = {}) {
   else if (opts.body != null) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
   const r = await fetch(API_URL + path, init);
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.error || 'Ошибка ' + r.status);
+  if (!r.ok) {
+    // мёртвая сессия — разлогиниваем и просим войти заново
+    if (r.status === 401 && session() && path !== '/api/login') {
+      setSession(null);
+      refreshProfile();
+      openModal('modal-auth');
+      throw new Error('Сессия истекла — войди заново');
+    }
+    throw new Error(d.error || 'Ошибка ' + r.status);
+  }
   return d;
 }
 

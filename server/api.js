@@ -181,33 +181,30 @@ const users = () => readJSON('users.json', {});
 const queue = () => readJSON('queue.json', { items: [] });
 
 /* ---------- auth ---------- */
-let SECRET = null;
-function secret() {
-  if (!SECRET) {
-    try { SECRET = fs.readFileSync(path.join(DATA, 'secret'), 'utf8').trim(); } catch (_) {}
-    if (!SECRET) {
-      SECRET = crypto.randomBytes(32).toString('hex');
-      try { fs.writeFileSync(path.join(DATA, 'secret'), SECRET); } catch (_) {}
-    }
-  }
-  return SECRET;
-}
 const b64u = b => Buffer.from(b).toString('base64url');
-function makeToken(name, admin) {
-  const payload = b64u(JSON.stringify({ n: name, a: !!admin, exp: Date.now() + 90 * 864e5 }));
-  const sig = crypto.createHmac('sha256', secret()).update(payload).digest('base64url');
+/* токен подписывается личным ключом пользователя (его хэшем) —
+   сессия живёт, пока существует аккаунт в зеркале */
+function makeToken(name, admin, key) {
+  const payload = b64u(JSON.stringify({ n: name, a: !!admin, exp: Date.now() + 365 * 864e5 }));
+  const sig = crypto.createHmac('sha256', key).update(payload).digest('base64url');
   return payload + '.' + sig;
 }
 function checkToken(tok) {
   if (!tok || typeof tok !== 'string' || !tok.includes('.')) return null;
   const [payload, sig] = tok.split('.');
-  const want = crypto.createHmac('sha256', secret()).update(payload).digest('base64url');
-  if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
+  let d;
   try {
-    const d = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    if (d.exp < Date.now()) return null;
-    return { name: d.n, admin: !!d.a };
-  } catch (_) { return null; }
+    d = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  } catch (_) {
+    return null;
+  }
+  const db = users();
+  const u = db[String(d.n || '').toLowerCase()];
+  if (!u) return null;
+  const want = crypto.createHmac('sha256', u.hash).update(payload).digest('base64url');
+  if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
+  if (d.exp < Date.now()) return null;
+  return { name: u.name, admin: u.name.toLowerCase() === ADMIN_USER.toLowerCase() };
 }
 function hashPass(pass, salt) {
   return crypto.pbkdf2Sync(pass, salt, 120000, 32, 'sha256').toString('hex');
@@ -339,7 +336,7 @@ const server = http.createServer(async (req, res) => {
       db[name.toLowerCase()] = { name, salt, hash: hashPass(pass, salt), created: Date.now() };
       writeJSON('users.json', db);
       const admin = name.toLowerCase() === ADMIN_USER.toLowerCase();
-      return json(res, 200, { ok: true, token: makeToken(name, admin), name, admin });
+      return json(res, 200, { ok: true, token: makeToken(name, admin, db[key].hash), name, admin });
     }
 
     if (p === '/api/login' && req.method === 'POST') {
@@ -351,7 +348,7 @@ const server = http.createServer(async (req, res) => {
         return json(res, 401, { error: 'Неверное имя или пароль' });
       }
       const admin = String(u.name).toLowerCase() === ADMIN_USER.toLowerCase();
-      return json(res, 200, { ok: true, token: makeToken(u.name, admin), name: u.name, admin });
+      return json(res, 200, { ok: true, token: makeToken(u.name, admin, u.hash), name: u.name, admin });
     }
 
     /* --- кто я --- */
@@ -548,20 +545,22 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`arbmusic-api on 0.0.0.0:${PORT}, data: ${DATA}`);
-  restoreFromMirror().then(() => {
-    // админ-аккаунт всегда существует, даже после перезапуска
-    const ADMIN_PASS = process.env.ADMIN_PASS || '';
-    if (ADMIN_PASS) {
-      const db = users();
-      const key = ADMIN_USER.toLowerCase();
-      if (!db[key]) {
-        const salt = crypto.randomBytes(16).toString('hex');
-        db[key] = { name: ADMIN_USER, salt, hash: hashPass(ADMIN_PASS, salt), created: Date.now() };
-        writeJSON('users.json', db);
-        console.log('admin account restored:', ADMIN_USER);
-      }
+/* старт: сначала восстанавливаем данные из зеркала, потом слушаем */
+(async () => {
+  await restoreFromMirror();
+  // админ-аккаунт всегда существует, даже после перезапуска
+  const ADMIN_PASS = process.env.ADMIN_PASS || '';
+  if (ADMIN_PASS) {
+    const db = users();
+    const key = ADMIN_USER.toLowerCase();
+    if (!db[key]) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      db[key] = { name: ADMIN_USER, salt, hash: hashPass(ADMIN_PASS, salt), created: Date.now() };
+      writeJSON('users.json', db);
+      console.log('admin account restored:', ADMIN_USER);
     }
+  }
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`arbmusic-api on 0.0.0.0:${PORT}, data: ${DATA}`);
   });
-});
+})();
