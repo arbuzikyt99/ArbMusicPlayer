@@ -336,7 +336,7 @@ const server = http.createServer(async (req, res) => {
       db[name.toLowerCase()] = { name, salt, hash: hashPass(pass, salt), created: Date.now() };
       writeJSON('users.json', db);
       const admin = name.toLowerCase() === ADMIN_USER.toLowerCase();
-      return json(res, 200, { ok: true, token: makeToken(name, admin, db[key].hash), name, admin });
+      return json(res, 200, { ok: true, token: makeToken(name, admin, db[key].hash), name, admin, premium: admin, owner: admin });
     }
 
     if (p === '/api/login' && req.method === 'POST') {
@@ -348,14 +348,49 @@ const server = http.createServer(async (req, res) => {
         return json(res, 401, { error: 'Неверное имя или пароль' });
       }
       const admin = String(u.name).toLowerCase() === ADMIN_USER.toLowerCase();
-      return json(res, 200, { ok: true, token: makeToken(u.name, admin, u.hash), name: u.name, admin });
+      return json(res, 200, { ok: true, token: makeToken(u.name, admin, u.hash), name: u.name, admin, premium: admin || (u.premiumUntil > Date.now()), owner: admin });
     }
 
     /* --- кто я --- */
     if (p === '/api/me') {
       const me = checkToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
       if (!me) return json(res, 200, { authorized: false });
-      return json(res, 200, { authorized: true, name: me.name, admin: me.admin });
+      const u = users()[me.name.toLowerCase()];
+      const premium = !!me.admin || !!(u && u.premiumUntil > Date.now());
+      return json(res, 200, { authorized: true, name: me.name, admin: me.admin, owner: me.admin, premium });
+    }
+
+    /* --- админ: список пользователей --- */
+    if (p === '/api/users' && req.method === 'GET') {
+      const me = checkToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+      if (!me || !me.admin) return json(res, 403, { error: 'Только для админа' });
+      const db = users();
+      const list = Object.values(db).map(u => ({
+        name: u.name,
+        created: u.created,
+        premium: !!me.admin && u.name.toLowerCase() === ADMIN_USER.toLowerCase() ? 'owner' : (u.premiumUntil > Date.now() ? u.premiumUntil : false),
+      }));
+      return json(res, 200, { users: list });
+    }
+
+    /* --- админ: выдать/снять премиум (80₽/мес) --- */
+    if (p === '/api/setpremium' && req.method === 'POST') {
+      const me = checkToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+      if (!me || !me.admin) return json(res, 403, { error: 'Только для админа' });
+      const body = JSON.parse((await readBody(req, 1e6)).toString('utf8') || '{}');
+      const key = safeName(body.user).toLowerCase();
+      const db = users();
+      const u = db[key];
+      if (!u) return json(res, 404, { error: 'Пользователь не найден' });
+      const months = Number(body.months) || 0;
+      if (months > 0) {
+        const base = (u.premiumUntil && u.premiumUntil > Date.now()) ? u.premiumUntil : Date.now();
+        u.premiumUntil = base + months * 30 * 864e5;
+      } else {
+        delete u.premiumUntil;
+      }
+      writeJSON('users.json', db);
+      return json(res, 200, { ok: true, user: u.name, premiumUntil: u.premiumUntil || null });
     }
 
     /* --- загрузка трека на модерацию --- */

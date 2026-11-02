@@ -666,3 +666,55 @@ a[href*="zcode"], a[href*="z.ai"], [class*="zcode"], [id*="zcode"], [class*="bad
 
 /* бейдж платформы — скрыт по id */
 #zcode-site-badge { display: none !important; visibility: hidden !important; opacity: 0 !important; width: 0 !important; height: 0 !important; pointer-events: none !important; }
+
+/* ============================================================
+   ПРЕМИУМ
+   ============================================================ */
+.badge.premium {
+  background: linear-gradient(135deg, rgba(250, 204, 21, .2), rgba(245, 158, 11, .2));
+  border-color: rgba(250, 204, 21, .4);
+  color: #fde68a;
+}
+.profile-action.premium svg { color: #facc15; }
+.prem-head { text-align: center; margin-bottom: 16px; }
+.prem-crown {
+  width: 70px; height: 70px; margin: 0 auto 10px; border-radius: 50%;
+  background: linear-gradient(135deg, #facc15, #f59e0b);
+  display: grid; place-items: center;
+  box-shadow: 0 8px 30px rgba(250, 204, 21, .4);
+}
+.prem-crown svg { width: 34px; height: 34px; color: #fff; }
+.prem-head h3 { font-size: 20px; margin-bottom: 4px; }
+.prem-price { font-size: 26px; font-weight: 900; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.prem-price span { font-size: 14px; font-weight: 600; }
+.prem-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.prem-list li {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09);
+  border-radius: 14px; padding: 12px 14px; font-size: 13.5px; line-height: 1.45; color: var(--txt);
+}
+.prem-list svg { width: 20px; height: 20px; color: #4ade80; flex-shrink: 0; }
+.prem-how {
+  background: rgba(139, 92, 246, .1); border: 1px solid rgba(139, 92, 246, .3);
+  border-radius: 14px; padding: 13px 15px; margin-bottom: 14px;
+  font-size: 13px; color: var(--sub); line-height: 1.55;
+}
+.prem-how b { color: var(--txt); }
+.prem-how ol { margin: 8px 0 0; padding-left: 18px; }
+.prem-how li { margin-bottom: 4px; }
+.user-item {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09);
+  border-radius: 15px; padding: 10px 12px; margin-bottom: 8px;
+}
+.user-item .uinfo { flex: 1; min-width: 0; }
+.user-item .uinfo b { display: block; font-size: 14px; }
+.user-item .uinfo span { display: block; font-size: 11.5px; color: var(--sub); }
+.user-item .ubtn {
+  padding: 7px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(250,204,21,.25), rgba(245,158,11,.25));
+  border: 1px solid rgba(250,204,21,.4); color: #fde68a;
+  transition: transform .15s ease;
+}
+.user-item .ubtn:active { transform: scale(.92); }
+.user-item .ubtn.off { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.15); color: var(--sub); }

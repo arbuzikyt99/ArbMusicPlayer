@@ -79,6 +79,30 @@ function canDeleteTrack(t) {
   if (!s || !t || !t.id || !t.id.startsWith('cloud_')) return false;
   return !!(s.admin || (t.by && t.by.toLowerCase() === s.name.toLowerCase()));
 }
+/* удалять трек может админ или его автор */
+function canDeleteTrack(t) {
+  const s = session();
+  if (!s || !t || !t.id || !t.id.startsWith('cloud_')) return false;
+  return !!(s.admin || (t.by && t.by.toLowerCase() === s.name.toLowerCase()));
+}
+
+/* премиум: владелец и админ — всегда, остальные — по подписке 80₽/мес */
+function isPremium() {
+  const s = session();
+  return !!(s && (s.admin || s.premium));
+}
+function refreshSessionStatus() {
+  if (!session()) return;
+  api('/api/me', { noAuth: false }).then(d => {
+    if (!d.authorized) { setSession(null); refreshProfile(); return; }
+    const s = session();
+    if (s && (s.premium !== d.premium || s.admin !== d.admin)) {
+      s.premium = d.premium; s.admin = d.admin; s.owner = d.owner;
+      setSession(s); refreshProfile();
+    }
+  }).catch(() => {});
+}
+window.__onBackground = () => { if (!isPremium()) { audio.pause(); toast('Фоновое прослушивание — только с Премиум'); } };
 
 function thumbHTML(track, cls) {
   const cov = coverUrl(track);
@@ -388,6 +412,14 @@ function refreshProfile() {
     $('#profile-avatar').textContent = (s.name[0] || 'A').toUpperCase();
     $('#profile-admin-badge').classList.toggle('hidden', !s.admin);
     $('#btn-admin').classList.toggle('hidden', !s.admin);
+    const pb = $('#profile-premium-badge');
+    if (pb) {
+      if (s.owner || s.admin) { pb.textContent = s.owner ? 'Владелец · ∞ Премиум' : 'Админ · Премиум'; pb.classList.remove('hidden'); }
+      else if (s.premium) { pb.textContent = 'Премиум'; pb.classList.remove('hidden'); }
+      else pb.classList.add('hidden');
+    }
+    const bb = $('#btn-buy-premium');
+    if (bb) bb.classList.toggle('hidden', !!(s.premium || s.admin));
   }
   // «Моя музыка» зависит от входа
   if (state.view === 'list' && state.listKind === 'favs') renderListView();
@@ -425,6 +457,13 @@ function wireAuth() {
       err.classList.remove('hidden');
     }
   });
+  $('#btn-buy-premium').addEventListener('click', () => {
+    const s2 = session();
+    if (!s2) { openModal('modal-auth'); return; }
+    $('#prem-myname').textContent = s2.name;
+    openModal('modal-premium');
+  });
+  $('#prem-ok').addEventListener('click', () => closeModal('modal-premium'));
   $('#btn-logout').addEventListener('click', () => {
     setSession(null);
     refreshProfile();
@@ -555,8 +594,36 @@ function wireAdmin() {
   $('#btn-admin').addEventListener('click', () => {
     openModal('modal-admin');
     loadAdminQueue();
+    loadAdminUsers();
   });
   $('#admin-refresh').addEventListener('click', loadAdminQueue);
+
+  // пользователи и премиум
+  async function loadAdminUsers() {
+    const box = $('#admin-users');
+    if (!box) return;
+    try {
+      const d = await api('/api/users');
+      box.innerHTML = d.users.map(u => {
+        const prem = u.premium === 'owner' ? '<span class="badge premium">Владелец · ∞</span>'
+          : u.premium ? '<span class="badge premium">до ' + new Date(u.premium).toLocaleDateString('ru') + '</span>'
+          : '';
+        const btn = u.premium === 'owner' ? ''
+          : u.premium ? '<button class="ubtn off" data-unprem="' + esc(u.name) + '">Снять</button>'
+          : '<button class="ubtn" data-prem="' + esc(u.name) + '">+1 мес</button>';
+        return '<div class="user-item"><div class="uinfo"><b>' + esc(u.name) + '</b><span>' + new Date(u.created).toLocaleDateString('ru') + '</span></div>' + prem + btn + '</div>';
+      }).join('');
+    } catch (e) {
+      box.innerHTML = '<div class="admin-spin">' + esc(e.message) + '</div>';
+    }
+  }
+  window.__loadAdminUsers = loadAdminUsers;
+  $('#admin-users').addEventListener('click', async e => {
+    const p = e.target.closest('[data-prem]');
+    const un = e.target.closest('[data-unprem]');
+    if (p) { await api('/api/setpremium', { body: { user: p.dataset.prem, months: 1 } }); loadAdminUsers(); toast('Премиум выдан: ' + p.dataset.prem); }
+    if (un) { await api('/api/setpremium', { body: { user: un.dataset.unprem, months: 0 } }); loadAdminUsers(); toast('Премиум снят'); }
+  });
   $('#admin-queue').addEventListener('click', async e => {
     const el = e.target.closest('.admin-item');
     if (!el) return;
@@ -1073,7 +1140,7 @@ function wire() {
 }
 
 /* ---------- авто-обновление веб-версии ---------- */
-const APP_VER = 8;
+const APP_VER = 9;
 async function checkVersion() {
   if (isNative || !/^https?:$/.test(location.protocol)) return;
   try {
@@ -1104,6 +1171,15 @@ async function init() {
   // общий каталог — единственный источник треков, на всех платформах
   loadCatalog();
   checkVersion();
+  // фоновое прослушивание — только с премиумом
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && !isPremium()) window.__onBackground();
+  });
+  if (isNative && window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+    window.Capacitor.Plugins.App.addListener('appStateChange', st => {
+      if (!st.isActive && !isPremium()) window.__onBackground();
+    });
+  }
   // service worker — только для оффлайн-запаса приложения (не в Electron file://)
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
