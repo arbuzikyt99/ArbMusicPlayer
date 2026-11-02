@@ -27,7 +27,13 @@ if (!gotLock) {
 
   app.setAppUserModelId('com.arbuzik.arbmusic');
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    // каждый запуск — со свежим интерфейсом: чистим HTTP-кэш и service worker'ы
+    try {
+      const { session } = require('electron');
+      await session.defaultSession.clearCache();
+      await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] });
+    } catch (_) { /* не критично */ }
     createWindow();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

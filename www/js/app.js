@@ -1091,9 +1091,9 @@ async function checkVersion() {
     const r = await fetch('./version.json?cb=' + Date.now(), { cache: 'no-cache' });
     if (!r.ok) return;
     const j = await r.json();
-    if (j.v !== APP_VER && !sessionStorage.getItem('arbmvreload')) {
+    if (j.v !== APP_VER && sessionStorage.getItem('arbmv') !== String(j.v)) {
       // новая версия на сервере — сбрасываем кэш и перезагружаемся один раз
-      sessionStorage.setItem('arbmvreload', '1');
+      sessionStorage.setItem('arbmv', String(j.v));
       for (const reg of await navigator.serviceWorker.getRegistrations()) await reg.unregister();
       for (const k of await caches.keys()) await caches.delete(k);
       location.reload();
