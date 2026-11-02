@@ -12,6 +12,7 @@
   "license": "MIT",
   "dependencies": {
     "@capacitor/android": "^6.2.3",
+    "@capacitor/app": "^8.1.2",
     "@capacitor/cli": "^6.2.3",
     "@capacitor/core": "^6.2.3"
   },
@@ -41,7 +42,10 @@
       "runAfterFinish": true,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
-      "installerLanguages": ["ru-RU", "en-US"],
+      "installerLanguages": [
+        "ru-RU",
+        "en-US"
+      ],
       "uninstallDisplayName": "ArbMusic"
     }
   },
