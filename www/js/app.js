@@ -333,26 +333,6 @@ function moveHotbarPill() {
 }
 window.addEventListener('resize', moveHotbarPill);
 
-/* кольцо-обводка перелетает на нажатую кнопку */
-function ringTo(el) {
-  const ring = document.getElementById('ring');
-  if (!ring) return;
-  const r = el.getBoundingClientRect();
-  const br = parseFloat(getComputedStyle(el).borderRadius) || 18;
-  ring.style.left = (r.left - 3) + 'px';
-  ring.style.top = (r.top - 3) + 'px';
-  ring.style.width = (r.width + 6) + 'px';
-  ring.style.height = (r.height + 6) + 'px';
-  ring.style.borderRadius = (br + 3) + 'px';
-  ring.style.opacity = '1';
-  clearTimeout(ring._t);
-  ring._t = setTimeout(() => { ring.style.opacity = '0'; }, 1100);
-}
-document.addEventListener('click', e => {
-  const t = e.target.closest('.hb-btn, .card, .search-pill, .profile-action, .chipbtn, .iconbtn, .play-btn, .btn-grad, .file-pick, .abtn, .row');
-  if (t) ringTo(t);
-}, true);
-
 function showView(name) {
   state.view = name;
   $$('.view').forEach(v => v.classList.toggle('active', v.id === `view-${name}`));
@@ -1084,7 +1064,7 @@ function wire() {
 }
 
 /* ---------- авто-обновление веб-версии ---------- */
-const APP_VER = 6;
+const APP_VER = 7;
 async function checkVersion() {
   if (isNative || !/^https?:$/.test(location.protocol)) return;
   try {

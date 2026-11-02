@@ -432,28 +432,6 @@ section.view.active { opacity: 1; pointer-events: auto; transform: none; z-index
   text-shadow: 0 1px 8px rgba(0, 0, 0, .35);
 }
 
-/* ============================================================
-   ПЛАВАЮЩЕЕ КОЛЬЦО — обводка перелетает на нажатую кнопку
-   ============================================================ */
-#ring {
-  position: fixed; left: 0; top: 0; width: 0; height: 0;
-  border: 2px solid transparent;
-  border-radius: 20px;
-  background: linear-gradient(rgba(255, 255, 255, .05), rgba(255, 255, 255, .05)) padding-box,
-              var(--grad) border-box;
-  box-shadow: 0 0 22px rgba(139, 92, 246, .45);
-  opacity: 0;
-  pointer-events: none;
-  z-index: 99;
-  transition:
-    left .34s cubic-bezier(.34, 1.25, .42, 1),
-    top .34s cubic-bezier(.34, 1.25, .42, 1),
-    width .34s cubic-bezier(.34, 1.25, .42, 1),
-    height .34s cubic-bezier(.34, 1.25, .42, 1),
-    border-radius .34s ease,
-    opacity .35s ease;
-  will-change: left, top, width, height;
-}
 
 /* ============================================================
    PROFILE
