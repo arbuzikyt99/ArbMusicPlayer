@@ -1104,15 +1104,8 @@ async function init() {
 
 /* скрываем платформенный водяной знак, если он появляется */
 new MutationObserver(() => {
-  for (const root of [document.body, document.documentElement]) {
-    if (!root) continue;
-    for (const el of [...root.children]) {
-      if (el.id === 'toast' || el.id === 'hotbar' || el.id === 'mini' || el.id === 'ring' || el.id === 'player' || el.closest('#hotbar,#mini,#player')) continue;
-      const txt = (el.textContent || '').slice(0, 200);
-      if (/made with/i.test(txt) || el.id === 'zcode-site-badge') el.remove();
-    }
-  }
-}).observe(document.documentElement, { childList: true });
+  document.querySelectorAll('#zcode-site-badge').forEach(el => el.remove());
+}).observe(document.documentElement, { childList: true, subtree: true });
 
 document.addEventListener('DOMContentLoaded', init);
 window.__arb = { get audio() { return audio; }, get state() { return state; } };
