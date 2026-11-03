@@ -4,7 +4,7 @@
 
 ## 🌐 Веб-версия + аккаунты + общая база
 
-**https://arbuzikyt99.github.io/ArbMusicPlayer/**
+**https://arbuzikyt99.github.io/**
 
 - **Аккаунты**: вход и регистрация (сервер `server/api.js`)
 - **Общий каталог**: треки из `catalog.json` видны каждому пользователю
