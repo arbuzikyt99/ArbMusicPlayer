@@ -354,12 +354,15 @@
       <div class="prem-how">
         <b>Как купить:</b>
         <ol>
-          <li>Переведи <b>80 ₽</b> админу переводом (СБП) — <b>arbuzikyt99</b></li>
-          <li>В сообщении укажи свой ник: <b id="prem-myname">—</b></li>
-          <li>Админ включит Премиум удалённо за пару минут</li>
+          <li>Нажми <b>«Оплатить 80 ₽»</b> — откроется защищённая страница оплаты Lava</li>
+          <li>Оплати картой или через СБП</li>
+          <li>Премиум включится <b>автоматически</b> через пару минут</li>
         </ol>
       </div>
-      <button class="btn-grad wide" id="prem-ok">Понятно</button>
+      <input id="prem-email" class="field" type="email" placeholder="Email для чека (необязательно)">
+      <button class="btn-grad wide" id="prem-pay">Оплатить 80 ₽</button>
+      <div class="form-err hidden" id="prem-err"></div>
+      <button class="btn-ghost" id="prem-ok">Я оплатил — обновить статус</button>
     </div>
   </div>
 

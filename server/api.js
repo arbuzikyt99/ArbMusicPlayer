@@ -13,6 +13,42 @@ const MAX_UPLOAD = 30 * 1024 * 1024;
 
 fs.mkdirSync(path.join(DATA, 'pending'), { recursive: true });
 
+/* ---------- Lava: оплата премиума ---------- */
+const LAVA_API_KEY = process.env.LAVA_API_KEY || '';
+const LAVA_OFFER_ID = process.env.LAVA_OFFER_ID || '';
+let lavaOfferCache = null;
+let lavaOfferAt = 0;
+
+async function lavaApi(method, path, body) {
+  const r = await fetch('https://gate.lava.top' + path, {
+    method,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ' + LAVA_API_KEY,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.message || ('Lava ' + r.status));
+  return d;
+}
+async function lavaOfferId() {
+  if (LAVA_OFFER_ID) return LAVA_OFFER_ID;
+  if (lavaOfferCache && Date.now() - lavaOfferAt < 600000) return lavaOfferCache;
+  const d = await lavaApi('GET', '/api/v1/products');
+  const items = d.data || d.items || [];
+  let offer = null;
+  for (const item of items) {
+    if (item.offers && item.offers.length) { offer = item.offers[0].id; break; }
+    if (item.id) { offer = item.id; break; }
+  }
+  if (!offer) throw new Error('Продукт не найден в Lava');
+  lavaOfferCache = offer;
+  lavaOfferAt = Date.now();
+  return offer;
+}
+
 /* ---------- json db ---------- */
 function readJSON(file, def) {
   try { return JSON.parse(fs.readFileSync(path.join(DATA, file), 'utf8')); }
@@ -524,6 +560,64 @@ const server = http.createServer(async (req, res) => {
       if (catSha) putBody.sha = catSha;
       await ghApi(`/repos/${GH_MIRROR_REPO}/contents/catalog.json`, { method: 'PUT', body: putBody });
       return json(res, 200, { ok: true, deleted: fileName });
+    }
+
+    /* --- Lava: создание счёта на Премиум 80₽ --- */
+    if (p === '/api/premium/pay' && req.method === 'POST') {
+      const me = checkToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+      if (!me) return json(res, 401, { error: 'Войди в аккаунт' });
+      if (!LAVA_API_KEY) return json(res, 501, { error: 'Оплата ещё не подключена: админ должен вписать LAVA_API_KEY' });
+      const body = JSON.parse((await readBody(req, 1e6)).toString('utf8') || '{}');
+      try {
+        const email = String(body.email || `${me.name}@arbmusic.app`).slice(0, 80);
+        const orderId = `prem-${me.name}-${Date.now()}`;
+        const offerId = await lavaOfferId();
+        const inv = await lavaApi('POST', '/api/v1/invoice/create', {
+          offerId, email, orderId, currency: 'RUB', buyerLanguage: 'RU',
+        });
+        const url = inv.data && inv.data.url;
+        if (!url) throw new Error('Lava не вернула ссылку на оплату');
+        return json(res, 200, { ok: true, url });
+      } catch (e) {
+        return json(res, 502, { error: 'Ошибка оплаты: ' + e.message });
+      }
+    }
+
+    /* --- Lava: вебхук — автоактивация премиума после оплаты --- */
+    if (p === '/api/lava/webhook' && req.method === 'POST') {
+      const raw = (await readBody(req, 1e6)).toString('utf8');
+      if (LAVA_API_KEY) {
+        const sign = String(req.headers['x-sign'] || '');
+        const want1 = crypto.createHmac('sha256', LAVA_API_KEY).update(raw).digest('hex');
+        const want2 = crypto.createHmac('sha256', LAVA_API_KEY).update(raw).digest('base64');
+        const ok = sign === want1 || sign === want2;
+        if (!ok) return json(res, 403, { error: 'bad sign' });
+      }
+      try {
+        const d = JSON.parse(raw || '{}');
+        const status = d.status || (d.data && d.data.status);
+        if (status === 'success') {
+          const oid = String(d.orderId || d.custom_orderId || '');
+          const email = String(d.email || '');
+          let username = null;
+          if (oid.startsWith('prem-')) {
+            const m = oid.slice(5).match(/^(.*)-(\d{13})$/);
+            if (m) username = m[1];
+          }
+          if (!username && email.endsWith('@arbmusic.app')) username = email.split('@')[0];
+          if (username) {
+            const db = users();
+            const u = db[username.toLowerCase()];
+            if (u) {
+              const base = (u.premiumUntil && u.premiumUntil > Date.now()) ? u.premiumUntil : Date.now();
+              u.premiumUntil = base + 30 * 864e5;
+              writeJSON('users.json', db);
+              console.log('premium activated for', username);
+            }
+          }
+        }
+      } catch (_) { /* не валим вебхук */ }
+      return json(res, 200, { ok: true });
     }
 
     /* --- админ: очередь --- */

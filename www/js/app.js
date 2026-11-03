@@ -463,7 +463,29 @@ function wireAuth() {
     $('#prem-myname').textContent = s2.name;
     openModal('modal-premium');
   });
-  $('#prem-ok').addEventListener('click', () => closeModal('modal-premium'));
+  $('#prem-ok').addEventListener('click', () => {
+    closeModal('modal-premium');
+    refreshSessionStatus();
+    setTimeout(refreshSessionStatus, 8000);
+    toast('Обновляю статус…');
+  });
+  $('#prem-pay').addEventListener('click', async () => {
+    const err = $('#prem-err');
+    err.classList.add('hidden');
+    const btn = $('#prem-pay');
+    btn.disabled = true; btn.textContent = 'Создаю счёт…';
+    try {
+      const d = await api('/api/premium/pay', { body: { email: $('#prem-email').value.trim() } });
+      // открываем страницу оплаты Lava
+      const w = window.open(d.url, '_blank');
+      if (!w) location.href = d.url;
+      toast('Страница оплаты открыта — после оплаты премиум включится сам');
+    } catch (e) {
+      err.textContent = e.message;
+      err.classList.remove('hidden');
+    }
+    btn.disabled = false; btn.textContent = 'Оплатить 80 ₽';
+  });
   $('#btn-logout').addEventListener('click', () => {
     setSession(null);
     refreshProfile();
@@ -1140,7 +1162,7 @@ function wire() {
 }
 
 /* ---------- авто-обновление веб-версии ---------- */
-const APP_VER = 9;
+const APP_VER = 10;
 async function checkVersion() {
   if (isNative || !/^https?:$/.test(location.protocol)) return;
   try {
