@@ -60,6 +60,10 @@ function createWindow() {
     },
   });
   win.setMenuBarVisibility(false);
+  // фоновое воспроизведение — только с премиумом: при сворачивании плеер проверяет права
+  win.on('minimize', () => {
+    win.webContents.executeJavaScript('window.__onBackground && window.__onBackground()').catch(() => {});
+  });
   // мгновенный старт на встроенной версии
   win.loadFile(LOCAL_FILE).catch(() => {});
   win.once('ready-to-show', () => {
