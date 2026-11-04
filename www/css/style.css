@@ -727,3 +727,5 @@ a[href*="zcode"], a[href*="z.ai"], [class*="zcode"], [id*="zcode"], [class*="bad
 }
 .ver-info b { color: var(--txt); }
 #ver-download { margin-top: 4px; }
+
+.ver-static b { color: var(--txt); }

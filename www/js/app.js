@@ -412,6 +412,11 @@ function refreshProfile() {
     $('#profile-avatar').textContent = (s.name[0] || 'A').toUpperCase();
     $('#profile-admin-badge').classList.toggle('hidden', !s.admin);
     $('#btn-admin').classList.toggle('hidden', !s.admin);
+    // версия: веб — просто номер, apk/exe — кнопка обновлений
+    const p = platformType();
+    const vb = $('#btn-version'), vs = $('#ver-static'), vn = $('#ver-num');
+    if (p === 'web') { vb.classList.add('hidden'); vs.classList.remove('hidden'); vn.textContent = APP_VER; }
+    else { vb.classList.remove('hidden'); vs.classList.add('hidden'); }
     const pb = $('#profile-premium-badge');
     if (pb) {
       if (s.owner || s.admin) { pb.textContent = s.owner ? 'Владелец · ∞ Премиум' : 'Админ · Премиум'; pb.classList.remove('hidden'); }
