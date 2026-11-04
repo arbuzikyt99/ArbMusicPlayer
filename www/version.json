@@ -1,1 +1,7 @@
-{ "v": 10 }
+{
+  "ui": 11,
+  "shell": 2,
+  "versionName": "ArbMusic 1.1.0",
+  "exeUrl": "https://github.com/arbuzikyt99/ArbMusicPlayer/releases/latest/download/ArbMusic-Setup.exe",
+  "androidNote": "Обновление Android — через RuStore"
+}

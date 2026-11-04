@@ -6,7 +6,7 @@
 const { app, BrowserWindow, shell, net } = require('electron');
 const path = require('path');
 
-const REMOTE_URL = 'https://arbmusic-7371.zai-ai.site/app/';
+const REMOTE_URL = 'https://arbmusic-7371.zai-ai.site/app/?shell=2';
 const FALLBACK_URL = 'https://arbuzikyt99.github.io/';
 const LOCAL_FILE = path.join(__dirname, '..', 'www', 'index.html');
 

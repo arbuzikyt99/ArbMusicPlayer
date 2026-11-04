@@ -602,6 +602,61 @@ async function loadAdminQueue() {
   }
 }
 
+/* ---------- версия и обновления ---------- */
+function wireVersion() {
+  $('#btn-version').addEventListener('click', async () => {
+    openModal('modal-version');
+    renderVersionInfo(null);
+    const b = await fetchBuild(true);
+    renderVersionInfo(b);
+    const res = $('#ver-result');
+    res.classList.remove('hidden');
+    res.style.color = '';
+    const msg = [];
+    if (b.ui > APP_VER) msg.push('Доступно обновление интерфейса (v' + b.ui + ') — жми «Обновить интерфейс»');
+    if (b.shell > SHELL_VER) msg.push('Доступна новая версия приложения (' + b.versionName + ') — скачай и установи');
+    res.textContent = msg.length ? msg.join('. ') : 'У тебя последняя версия ✓';
+    res.style.color = '#6ee7b7';
+    if (b.shell > SHELL_VER) showDownload(b);
+  });
+  $('#ver-download').addEventListener('click', () => {
+    const b = window.__latestBuild;
+    if (!b) return;
+    const p = platformType();
+    if (p === 'exe') window.open(b.exeUrl, '_blank');
+    else toast('Обновление Android — через RuStore');
+  });
+  $('#ver-refresh').addEventListener('click', async () => {
+    for (const reg of await navigator.serviceWorker.getRegistrations()) await reg.unregister();
+    for (const k of await caches.keys()) await caches.delete(k);
+    location.reload();
+  });
+}
+async function fetchBuild(bust) {
+  const r = await fetch('./version.json' + (bust ? '?cb=' + Date.now() : ''), { cache: 'no-cache' });
+  const b = await r.json();
+  window.__latestBuild = b;
+  return b;
+}
+function renderVersionInfo(b) {
+  const el = $('#ver-info');
+  if (!el) return;
+  const p = platformType();
+  const platName = { apk: 'Android (APK)', exe: 'Windows (EXE)', web: 'Веб-версия' }[p];
+  el.innerHTML =
+    '<div class="ver-row">Интерфейс: <b>v' + APP_VER + '</b></div>' +
+    '<div class="ver-row">Приложение: <b>' + (SHELL_VER ? 'v' + SHELL_VER : '—') + '</b> · ' + platName + '</div>' +
+    (b ? '<div class="ver-row">На сервере: <b>интерфейс v' + b.ui + ' · оболочка v' + b.shell + '</b></div>' +
+         '<div class="ver-row">' + esc(b.versionName) + '</div>' : '');
+  const dl = $('#ver-download');
+  if (b && b.shell > SHELL_VER && p === 'exe') dl.classList.remove('hidden');
+  else dl.classList.add('hidden');
+}
+function showDownload(b) {
+  const dl = $('#ver-download');
+  if (dl) dl.classList.remove('hidden');
+}
+
 function wireAdmin() {
   $('#mini-del').addEventListener('click', e => {
     e.stopPropagation();
@@ -1060,6 +1115,7 @@ function wire() {
   wireAuth();
   wireUpload();
   wireAdmin();
+  wireVersion();
 
   // list view
   $('#btn-list-shuffle').addEventListener('click', () => {
@@ -1162,7 +1218,17 @@ function wire() {
 }
 
 /* ---------- авто-обновление веб-версии ---------- */
-const APP_VER = 10;
+const APP_VER = 11;
+/* номер оболочки (нативного приложения): ?shell=N в адресе, 0 — чистый веб */
+const SHELL_VER = parseInt(new URLSearchParams(location.search).get('shell')) || 0;
+function platformType() {
+  if (window.Capacitor && window.Capacitor.getPlatform) {
+    const p = window.Capacitor.getPlatform();
+    if (p === 'android') return 'apk';
+  }
+  if (navigator.userAgent.includes('Electron')) return 'exe';
+  return 'web';
+}
 async function checkVersion() {
   if (isNative || !/^https?:$/.test(location.protocol)) return;
   try {

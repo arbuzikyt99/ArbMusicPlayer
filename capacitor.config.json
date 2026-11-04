@@ -4,6 +4,6 @@
   "webDir": "www",
   "server": {
     "androidScheme": "https",
-    "url": "https://arbmusic-7371.zai-ai.site/app/"
+    "url": "https://arbmusic-7371.zai-ai.site/app/?shell=2"
   }
 }
