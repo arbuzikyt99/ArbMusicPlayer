@@ -199,7 +199,6 @@ function mergeLibrary() {
 
 function refreshUI() {
   const n = state.tracks.length;
-  $('#mix-sub').textContent = n ? `случайный порядок · ${n} ${plural(n, 'трек', 'трека', 'треков')}` : 'случайный порядок · все треки';
   $('#all-count').textContent = n ? `${n} ${plural(n, 'трек', 'трека', 'треков')}` : '';
   $('#home-sub').textContent = n ? `${n} ${plural(n, 'трек', 'трека', 'треков')}` : 'общая база';
   renderHome();
@@ -752,12 +751,7 @@ function playList(list, startIdx, opts = {}) {
   state.baseQueue = [...list];
   if (opts.shuffle || state.shuffle) {
     state.queue = shuffleArr([...list]);
-    if (startIdx >= 0 && opts.keepFirst) {
-      const t = list[startIdx];
-      const k = state.queue.indexOf(t);
-      if (k > 0) [state.queue[0], state.queue[k]] = [state.queue[k], state.queue[0]];
-      state.qi = 0;
-    } else state.qi = startIdx >= 0 ? 0 : 0;
+    state.qi = 0; // случайно выбранный трек — первый в перемешанной очереди
     state.shuffle = true;
   } else {
     state.queue = [...list];
@@ -1102,7 +1096,7 @@ function wire() {
   $('#card-mix').addEventListener('click', () => {
     if (!state.tracks.length) { toast('Сначала найди музыку'); return; }
     state.shuffle = true;
-    playList(state.tracks, 0, { shuffle: true, keepFirst: true });
+    playList(state.tracks, -1, { shuffle: true });
     openPlayer();
   });
   $('#btn-search').addEventListener('click', () => {
@@ -1127,7 +1121,7 @@ function wire() {
     const list = getListForView();
     if (!list.length) { toast('Пусто'); return; }
     state.shuffle = true;
-    playList(list, 0, { shuffle: true, keepFirst: true });
+    playList(list, -1, { shuffle: true });
     openPlayer();
   });
   $$('[data-back]').forEach(b => b.addEventListener('click', () => showView('home')));
@@ -1223,7 +1217,7 @@ function wire() {
 }
 
 /* ---------- авто-обновление веб-версии ---------- */
-const APP_VER = 12;
+const APP_VER = 13;
 /* номер оболочки (нативного приложения): ?shell=N в адресе, 0 — чистый веб */
 const SHELL_VER = parseInt(new URLSearchParams(location.search).get('shell')) || 0;
 function platformType() {
