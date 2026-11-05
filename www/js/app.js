@@ -465,7 +465,7 @@ function wireAuth() {
   $('#btn-buy-premium').addEventListener('click', () => {
     const s2 = session();
     if (!s2) { openModal('modal-auth'); return; }
-    $('#prem-myname').textContent = s2.name;
+    const nm = $('#prem-myname'); if (nm) nm.textContent = s2.name;
     openModal('modal-premium');
   });
   $('#prem-ok').addEventListener('click', () => {
@@ -1223,7 +1223,7 @@ function wire() {
 }
 
 /* ---------- авто-обновление веб-версии ---------- */
-const APP_VER = 11;
+const APP_VER = 12;
 /* номер оболочки (нативного приложения): ?shell=N в адресе, 0 — чистый веб */
 const SHELL_VER = parseInt(new URLSearchParams(location.search).get('shell')) || 0;
 function platformType() {

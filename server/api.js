@@ -13,40 +13,53 @@ const MAX_UPLOAD = 30 * 1024 * 1024;
 
 fs.mkdirSync(path.join(DATA, 'pending'), { recursive: true });
 
-/* ---------- Lava: оплата премиума ---------- */
-const LAVA_API_KEY = process.env.LAVA_API_KEY || '';
-const LAVA_OFFER_ID = process.env.LAVA_OFFER_ID || '';
-let lavaOfferCache = null;
-let lavaOfferAt = 0;
+/* ---------- ЮKassa: оплата премиума 80₽/мес ---------- */
+const YK_API_KEY = process.env.YK_API_KEY || '';
+const YK_SHOP_ID = process.env.YK_SHOP_ID || '';
+const YK_SECRET = process.env.YK_SECRET || '';
+const YK_API = 'https://api.yookassa.ru/v3';
 
-async function lavaApi(method, path, body) {
-  const r = await fetch('https://gate.lava.top' + path, {
-    method,
+/* два способа авторизации: новый API-ключ (Bearer) или классика (shopId:секрет) */
+function ykAuth() {
+  if (YK_API_KEY) return 'Bearer ' + YK_API_KEY;
+  if (YK_SHOP_ID && YK_SECRET) return 'Basic ' + Buffer.from(YK_SHOP_ID + ':' + YK_SECRET).toString('base64');
+  return null;
+}
+
+async function ykApi(path, body, idemKey) {
+  const auth = ykAuth();
+  if (!auth) throw new Error('ЮKassa не подключена');
+  const r = await fetch(YK_API + path, {
+    method: body ? 'POST' : 'GET',
     headers: {
-      Accept: 'application/json',
       'Content-Type': 'application/json',
-      Authorization: 'Bearer ' + LAVA_API_KEY,
+      Authorization: auth,
+      ...(idemKey ? { 'Idempotence-Key': idemKey } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.message || ('Lava ' + r.status));
+  if (!r.ok) throw new Error(d.description || ('ЮKassa ' + r.status));
   return d;
 }
-async function lavaOfferId() {
-  if (LAVA_OFFER_ID) return LAVA_OFFER_ID;
-  if (lavaOfferCache && Date.now() - lavaOfferAt < 600000) return lavaOfferCache;
-  const d = await lavaApi('GET', '/api/v1/products');
-  const items = d.data || d.items || [];
-  let offer = null;
-  for (const item of items) {
-    if (item.offers && item.offers.length) { offer = item.offers[0].id; break; }
-    if (item.id) { offer = item.id; break; }
-  }
-  if (!offer) throw new Error('Продукт не найден в Lava');
-  lavaOfferCache = offer;
-  lavaOfferAt = Date.now();
-  return offer;
+
+/* журнал платежей (id → юзер) — чтобы не выдавать премиум дважды */
+const paymentsDb = () => readJSON('payments.json', {});
+function markPayment(id, user, amount, status) {
+  const db = paymentsDb();
+  db[id] = { user, amount, status, at: Date.now() };
+  writeJSON('payments.json', db);
+}
+
+/* продлить премиум пользователю на days дней */
+function extendPremium(username, days) {
+  const db = users();
+  const u = db[String(username || '').toLowerCase()];
+  if (!u) return false;
+  const base = (u.premiumUntil && u.premiumUntil > Date.now()) ? u.premiumUntil : Date.now();
+  u.premiumUntil = base + days * 864e5;
+  writeJSON('users.json', db);
+  return true;
 }
 
 /* ---------- json db ---------- */
@@ -562,61 +575,55 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, deleted: fileName });
     }
 
-    /* --- Lava: создание счёта на Премиум 80₽ --- */
+    /* --- ЮKassa: создание счёта на Премиум 80₽ --- */
     if (p === '/api/premium/pay' && req.method === 'POST') {
       const me = checkToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
       if (!me) return json(res, 401, { error: 'Войди в аккаунт' });
-      if (!LAVA_API_KEY) return json(res, 501, { error: 'Оплата ещё не подключена: админ должен вписать LAVA_API_KEY' });
-      const body = JSON.parse((await readBody(req, 1e6)).toString('utf8') || '{}');
+      if (!ykAuth()) return json(res, 501, { error: 'Оплата ещё не подключена: админ должен вписать ключи ЮKassa' });
       try {
-        const email = String(body.email || `${me.name}@arbmusic.app`).slice(0, 80);
-        const orderId = `prem-${me.name}-${Date.now()}`;
-        const offerId = await lavaOfferId();
-        const inv = await lavaApi('POST', '/api/v1/invoice/create', {
-          offerId, email, orderId, currency: 'RUB', buyerLanguage: 'RU',
-        });
-        const url = inv.data && inv.data.url;
-        if (!url) throw new Error('Lava не вернула ссылку на оплату');
-        return json(res, 200, { ok: true, url });
+        const idem = crypto.randomUUID();
+        const pay = await ykApi('/payments', {
+          amount: { value: '80.00', currency: 'RUB' },
+          capture: true,
+          confirmation: { type: 'redirect', return_url: 'https://arbmusic-7371.zai-ai.site/app/' },
+          description: 'ArbMusic Премиум — 1 месяц (' + me.name + ')',
+          metadata: { user: me.name },
+        }, idem);
+        const url = pay.confirmation && pay.confirmation.confirmation_url;
+        if (!url) throw new Error('ЮKassa не вернула ссылку на оплату');
+        markPayment(pay.id, me.name, 80, pay.status);
+        return json(res, 200, { ok: true, url, paymentId: pay.id });
       } catch (e) {
         return json(res, 502, { error: 'Ошибка оплаты: ' + e.message });
       }
     }
 
-    /* --- Lava: вебхук — автоактивация премиума после оплаты --- */
-    if (p === '/api/lava/webhook' && req.method === 'POST') {
-      const raw = (await readBody(req, 1e6)).toString('utf8');
-      if (LAVA_API_KEY) {
-        const sign = String(req.headers['x-sign'] || '');
-        const want1 = crypto.createHmac('sha256', LAVA_API_KEY).update(raw).digest('hex');
-        const want2 = crypto.createHmac('sha256', LAVA_API_KEY).update(raw).digest('base64');
-        const ok = sign === want1 || sign === want2;
-        if (!ok) return json(res, 403, { error: 'bad sign' });
-      }
+    /* --- ЮKassa: вебхук — автоактивация премиума после оплаты --- */
+    if (p === '/api/yookassa/webhook' && req.method === 'POST') {
       try {
-        const d = JSON.parse(raw || '{}');
-        const status = d.status || (d.data && d.data.status);
-        if (status === 'success') {
-          const oid = String(d.orderId || d.custom_orderId || '');
-          const email = String(d.email || '');
-          let username = null;
-          if (oid.startsWith('prem-')) {
-            const m = oid.slice(5).match(/^(.*)-(\d{13})$/);
-            if (m) username = m[1];
-          }
-          if (!username && email.endsWith('@arbmusic.app')) username = email.split('@')[0];
-          if (username) {
-            const db = users();
-            const u = db[username.toLowerCase()];
-            if (u) {
-              const base = (u.premiumUntil && u.premiumUntil > Date.now()) ? u.premiumUntil : Date.now();
-              u.premiumUntil = base + 30 * 864e5;
-              writeJSON('users.json', db);
-              console.log('premium activated for', username);
-            }
+        const d = JSON.parse((await readBody(req, 1e6)).toString('utf8') || '{}');
+        const pid = d.object && d.object.id;
+        const event = d.event || '';
+        if (pid && (event === 'payment.succeeded' || event === 'payment.waiting_for_capture')) {
+          // статус проверяем напрямую через API ЮKassa — телу вебхука доверять нельзя
+          const pay = await ykApi('/payments/' + pid);
+          const db = paymentsDb();
+          const rec = db[pid];
+          const user = (pay.metadata && pay.metadata.user) || (rec && rec.user);
+          if (pay.status === 'succeeded' && user && (!rec || rec.status !== 'succeeded')) {
+            extendPremium(user, 30);
+            markPayment(pid, user, Number(pay.amount && pay.amount.value) || 80, 'succeeded');
+            console.log('premium activated via ЮKassa for', user);
           }
         }
-      } catch (_) { /* не валим вебхук */ }
+        if (event === 'payment.canceled' && pid) {
+          const pay = await ykApi('/payments/' + pid);
+          const user = (pay.metadata && pay.metadata.user) || null;
+          if (user) markPayment(pid, user, Number(pay.amount && pay.amount.value) || 80, 'canceled');
+        }
+      } catch (e) {
+        console.error('webhook error:', e.message);
+      }
       return json(res, 200, { ok: true });
     }
 
