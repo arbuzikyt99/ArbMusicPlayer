@@ -619,31 +619,31 @@ function wireVersion() {
     $('#ver-install').classList.add('hidden');
     $('#ver-download').classList.add('hidden');
     $('#ver-download').textContent = 'Скачать обновление';
-    if (window.arbShell) {
-      // оболочка EXE: проверка и установка через встроенный апдейтер
-      res.textContent = 'Проверяю…';
-      arbShell.checkForUpdates();
-      clearTimeout(window.__verT);
-      window.__verT = setTimeout(() => {
-        const res = $('#ver-result');
-        if (res && res.textContent === 'Проверяю…') {
-          res.style.color = '#6ee7b7';
-          res.textContent = 'У тебя последняя версия ✓';
+    try {
+      if (window.arbShell) {
+        // оболочка EXE: проверка через встроенный апдейтер
+        res.textContent = 'Проверяю…';
+        arbShell.checkForUpdates();
+      } else if (platformType() === 'apk') {
+        const b = await fetchBuild(true);
+        renderVersionInfo(b);
+        res.textContent = 'Обновления приложения — через RuStore';
+        res.style.color = '#6ee7b7';
+      } else {
+        const b = await fetchBuild(true);
+        renderVersionInfo(b);
+        const msg = [];
+        if (b.ui > APP_VER) msg.push('Доступно обновление интерфейса (v' + b.ui + ') — жми «Обновить интерфейс»');
+        if (compareVersions(b.shellVersionName, SHELL_VERSION_NAME) > 0 && b.exeUrl) {
+          msg.push('Доступна новая версия приложения (' + b.versionName + ') — скачай и установи');
+          showDownload(b);
         }
-      }, 15000);
-    } else if (platformType() === 'apk') {
-      await fetchBuild(true);
-      renderVersionInfo(await fetchBuild(true));
-      res.textContent = 'Обновления приложения — через RuStore';
-      res.style.color = '#6ee7b7';
-    } else {
-      const b = await fetchBuild(true);
-      renderVersionInfo(b);
-      const msg = [];
-      if (b.ui > APP_VER) msg.push('Доступно обновление интерфейса (v' + b.ui + ') — жми «Обновить интерфейс»');
-      res.textContent = msg.length ? msg.join('. ') : 'У тебя последняя версия ✓';
-      res.style.color = '#6ee7b7';
-      if (b.exeUrl) showDownload(b);
+        res.textContent = msg.length ? msg.join('. ') : 'У тебя последняя версия ✓';
+        res.style.color = '#6ee7b7';
+      }
+    } catch (e) {
+      res.style.color = '#fca5a5';
+      res.textContent = 'Не удалось проверить: ' + e.message;
     }
   });
   $('#ver-download').addEventListener('click', () => {
@@ -680,6 +680,12 @@ function wireVersion() {
       }
     });
   }
+}
+function compareVersions(a, b) {
+  const pa = String(a || '0').split('.').map(Number);
+  const pb = String(b || '0').split('.').map(Number);
+  for (let i = 0; i < 3; i++) { const d = (pa[i] || 0) - (pb[i] || 0); if (d) return d; }
+  return 0;
 }
 async function fetchBuild(bust) {
   const r = await fetch('./version.json' + (bust ? '?cb=' + Date.now() : ''), { cache: 'no-cache' });
@@ -1290,9 +1296,9 @@ async function checkVersion() {
     const r = await fetch('./version.json?cb=' + Date.now(), { cache: 'no-cache' });
     if (!r.ok) return;
     const j = await r.json();
-    if (j.v !== APP_VER && sessionStorage.getItem('arbmv') !== String(j.v)) {
-      // новая версия на сервере — сбрасываем кэш и перезагружаемся один раз
-      sessionStorage.setItem('arbmv', String(j.v));
+    if (typeof j.ui !== 'number') return;
+    if (j.ui !== APP_VER && sessionStorage.getItem('arbmv') !== String(j.ui)) {
+      sessionStorage.setItem('arbmv', String(j.ui));
       for (const reg of await navigator.serviceWorker.getRegistrations()) await reg.unregister();
       for (const k of await caches.keys()) await caches.delete(k);
       location.reload();

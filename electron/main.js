@@ -10,7 +10,7 @@ const { app, BrowserWindow, shell, net, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
-const REMOTE_URL = 'https://arbmusic-7371.zai-ai.site/app/?shell=4';
+const REMOTE_URL = 'https://arbmusic-7371.zai-ai.site/app/?shell=5';
 const FALLBACK_URL = 'https://arbuzikyt99.github.io/';
 const LOCAL_FILE = path.join(__dirname, '..', 'www', 'index.html');
 
