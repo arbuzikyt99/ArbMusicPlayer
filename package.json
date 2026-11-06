@@ -1,6 +1,6 @@
 {
   "name": "arbmusic",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "ArbMusic — музыкальный плеер (Android APK, веб для iPhone, Windows EXE)",
   "main": "electron/main.js",
   "scripts": {
