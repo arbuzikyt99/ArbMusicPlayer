@@ -1199,6 +1199,10 @@ function wire() {
     if (e.target.closest('.iconbtn') || e.target.closest('.rdel')) return;
     openPlayer();
   });
+  $('#mini-close').addEventListener('click', e => {
+    e.stopPropagation();
+    $('#mini').classList.remove('up'); // скрыть панель; музыка играет дальше
+  });
   $('#mini-play').addEventListener('click', togglePlay);
   $('#mini-next').addEventListener('click', () => next());
 

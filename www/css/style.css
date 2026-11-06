@@ -729,3 +729,15 @@ a[href*="zcode"], a[href*="z.ai"], [class*="zcode"], [id*="zcode"], [class*="bad
 #ver-download { margin-top: 4px; }
 
 .ver-static b { color: var(--txt); }
+
+/* крестик скрытия мини-плеера — виден всем */
+#mini-close { width: 34px; height: 34px; display: grid; place-items: center; color: var(--sub); border-radius: 50%; flex-shrink: 0; transition: transform .15s ease; }
+#mini-close svg { width: 17px; height: 17px; }
+#mini-close:hover { color: var(--txt); }
+#mini-close:active { transform: scale(.88); }
+
+/* крестик скрытия мини-плеера — виден всем */
+#mini-close { width: 34px; height: 34px; display: grid; place-items: center; color: var(--sub); border-radius: 50%; flex-shrink: 0; transition: transform .15s ease; }
+#mini-close svg { width: 17px; height: 17px; }
+#mini-close:hover { color: var(--txt); }
+#mini-close:active { transform: scale(.88); }
