@@ -61,6 +61,9 @@ function setupUpdater() {
   autoUpdater.on('update-downloaded', (info) => {
     send('updater', { event: 'update-downloaded', version: info.version });
   });
+  autoUpdater.on('update-not-available', (info) => {
+    send('updater', { event: 'update-not-available', version: info.version });
+  });
   autoUpdater.on('error', (e) => {
     send('updater', { event: 'error', message: String(e && e.message || e).slice(0, 140) });
   });
