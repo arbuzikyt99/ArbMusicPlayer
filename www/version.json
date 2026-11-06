@@ -1,9 +1,1 @@
-{
-  "ui": 14,
-  "shell": 4,
-  "shellVersionName": "1.2.0",
-  "versionName": "ArbMusic 1.2.0",
-  "exeUrl": "https://github.com/arbuzikyt99/ArbMusicPlayer/releases/latest/download/ArbMusic-Setup.exe",
-  "apkUrl": "https://github.com/arbuzikyt99/ArbMusicPlayer/releases/latest/download/ArbMusic.apk",
-  "whatsNew": "Обновление прямо из приложения без переустановки, исправления"
-}
+{ "v": 14 }

@@ -1201,7 +1201,9 @@ function wire() {
   });
   $('#mini-close').addEventListener('click', e => {
     e.stopPropagation();
-    $('#mini').classList.remove('up'); // скрыть панель; музыка играет дальше
+    audio.pause();
+    updatePlayUI();
+    $('#mini').classList.remove('up'); // спрятать панель
   });
   $('#mini-play').addEventListener('click', togglePlay);
   $('#mini-next').addEventListener('click', () => next());
@@ -1254,7 +1256,7 @@ function wire() {
 }
 
 /* ---------- авто-обновление веб-версии ---------- */
-const APP_VER = 14;
+const APP_VER = 15;
 /* версия оболочки: EXE сообщает свою, APK возьмёт из устройства, веб — 0 */
 let SHELL_VERSION_NAME = '0';
 /* номер оболочки (нативного приложения): ?shell=N в адресе, 0 — чистый веб */
