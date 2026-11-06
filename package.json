@@ -1,6 +1,6 @@
 {
   "name": "arbmusic",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "ArbMusic — музыкальный плеер (Android APK, веб для iPhone, Windows EXE)",
   "main": "electron/main.js",
   "scripts": {
@@ -14,7 +14,9 @@
     "@capacitor/android": "^6.2.3",
     "@capacitor/app": "^8.1.2",
     "@capacitor/cli": "^6.2.3",
-    "@capacitor/core": "^6.2.3"
+    "@capacitor/core": "^6.2.3",
+    "@capacitor/device": "^8.0.3",
+    "electron-updater": "^6.8.11"
   },
   "build": {
     "appId": "com.arbuzik.arbmusic",
@@ -47,6 +49,11 @@
         "en-US"
       ],
       "uninstallDisplayName": "ArbMusic"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "arbuzikyt99",
+      "repo": "ArbMusicPlayer"
     }
   },
   "devDependencies": {

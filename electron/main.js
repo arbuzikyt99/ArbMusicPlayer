@@ -1,12 +1,16 @@
 /* ArbMusic — Electron main process (Windows build).
    Запуск мгновенный: сразу открываем встроенную версию,
    затем, если сервер доступен, переключаемся на неё —
-   так интерфейс всегда свежий без переустановок. */
+   так интерфейс всегда свежий без переустановок.
+
+   Обновления оболочки: electron-updater + GitHub Releases.
+   Качается только изменённое (дельта по blockmap), ставится без переустановки. */
 'use strict';
-const { app, BrowserWindow, shell, net } = require('electron');
+const { app, BrowserWindow, shell, net, ipcMain } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
-const REMOTE_URL = 'https://arbmusic-7371.zai-ai.site/app/?shell=3';
+const REMOTE_URL = 'https://arbmusic-7371.zai-ai.site/app/?shell=4';
 const FALLBACK_URL = 'https://arbuzikyt99.github.io/';
 const LOCAL_FILE = path.join(__dirname, '..', 'www', 'index.html');
 
@@ -36,11 +40,50 @@ if (!gotLock) {
       await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] });
     } catch (_) { /* не критично */ }
     createWindow();
+    setupUpdater();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
   });
 }
+
+/* ---------- автообновление оболочки ---------- */
+function setupUpdater() {
+  autoUpdater.autoDownload = false; // скачиваем только по кнопке пользователя
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-available', (info) => {
+    send('updater', { event: 'update-available', version: info.version });
+  });
+  autoUpdater.on('download-progress', (p) => {
+    send('updater', { event: 'download-progress', percent: Math.round(p.percent) });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    send('updater', { event: 'update-downloaded', version: info.version });
+  });
+  autoUpdater.on('error', (e) => {
+    send('updater', { event: 'error', message: String(e && e.message || e).slice(0, 140) });
+  });
+  // тихая проверка при старте
+  autoUpdater.checkForUpdates().catch(() => {});
+}
+
+function send(channel, data) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, data);
+}
+
+ipcMain.on('updater-check', () => {
+  autoUpdater.checkForUpdates().catch(() => {});
+});
+ipcMain.on('updater-download', () => {
+  autoUpdater.downloadUpdate().catch(() => {});
+});
+ipcMain.on('updater-install', () => {
+  autoUpdater.quitAndInstall(false, true);
+});
+ipcMain.on('app-version', (e) => {
+  e.returnValue = app.getVersion();
+});
 
 function createWindow() {
   win = new BrowserWindow({
@@ -57,6 +100,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
   win.setMenuBarVisibility(false);
