@@ -1,1 +1,9 @@
-{ "v": 18 }
+{
+  "ui": 20,
+  "shell": 5,
+  "shellVersionName": "2.0.0",
+  "versionName": "ArbMusic 2.0.0",
+  "exeUrl": "https://github.com/arbuzikyt99/ArbMusicPlayer/releases/latest/download/ArbMusic-Setup.exe",
+  "apkUrl": "https://github.com/arbuzikyt99/ArbMusicPlayer/releases/latest/download/ArbMusic.apk",
+  "whatsNew": "Обновления из приложения (только изменённое), ArbStudio, премиум через ЮKassa"
+}

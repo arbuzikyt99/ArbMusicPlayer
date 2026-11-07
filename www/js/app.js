@@ -414,6 +414,14 @@ function refreshProfile() {
     $('#profile-avatar').textContent = (s.name[0] || 'A').toUpperCase();
     $('#profile-admin-badge').classList.toggle('hidden', !s.admin);
     $('#btn-admin').classList.toggle('hidden', !s.admin);
+    // зелёная точка, если обновление скачано и ждёт установки
+    const vbtn = $('#btn-version');
+    if (vbtn && !vbtn.querySelector('.upd-dot')) {
+      const dot = document.createElement('i');
+      dot.className = 'upd-dot';
+      vbtn.appendChild(dot);
+      dot.style.display = window.__updateReady ? 'block' : 'none';
+    }
     // версия: веб — просто номер, apk/exe — кнопка обновлений
     const p = platformType();
     const vb = $('#btn-version'), vs = $('#ver-static'), vn = $('#ver-num');
@@ -718,6 +726,12 @@ function wireVersion() {
         res.textContent = 'Обновление ' + d.version + ' скачано — жми «Перезапустить и установить»';
         $('#ver-install').classList.remove('hidden');
         $('#ver-download').classList.add('hidden');
+      }
+        window.__updateReady = true;
+        const vb = $('#btn-version .upd-dot');
+        if (vb) vb.style.display = 'block'; else if (d.event === 'update-not-available') {
+        res.style.color = '#6ee7b7';
+        res.textContent = 'У тебя последняя версия ✓';
       } else if (d.event === 'update-not-available') {
         res.style.color = '#6ee7b7';
         res.textContent = 'У тебя последняя версия ✓';
@@ -1334,7 +1348,7 @@ function wire() {
 }
 
 /* ---------- авто-обновление веб-версии ---------- */
-const APP_VER = 18;
+const APP_VER = 20;
 /* версия оболочки: EXE сообщает свою, APK возьмёт из устройства, веб — 0 */
 let SHELL_VERSION_NAME = '0';
 /* номер оболочки (нативного приложения): ?shell=N в адресе, 0 — чистый веб */
