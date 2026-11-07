@@ -505,6 +505,7 @@ function wireAuth() {
 /* ---------- загрузка трека на модерацию ---------- */
 let upAudio = null, upLrc = null, upCover = null;
 function wireUpload() {
+  $('#btn-studio-upload').addEventListener('click', () => {
     if (!session()) { openModal('modal-auth'); return; }
     upAudio = upLrc = upCover = null;
     $('#upload-audio-name').textContent = 'Выбрать аудиофайл';
