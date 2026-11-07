@@ -778,3 +778,14 @@ a[href*="zcode"], a[href*="z.ai"], [class*="zcode"], [id*="zcode"], [class*="bad
   border-radius: 50%; background: #4ade80; box-shadow: 0 0 8px rgba(74, 222, 128, .8);
 }
 .profile-action { position: relative; }
+
+/* прогресс скачивания обновления */
+.ver-progress {
+  height: 8px; border-radius: 6px; background: rgba(255,255,255,.1);
+  overflow: hidden; margin-bottom: 12px;
+}
+.ver-progress i {
+  display: block; height: 100%; width: 0%;
+  background: var(--grad); border-radius: 6px;
+  transition: width .3s ease;
+}

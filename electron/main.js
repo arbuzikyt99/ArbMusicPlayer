@@ -10,7 +10,7 @@ const { app, BrowserWindow, shell, net, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
-const REMOTE_URL = 'https://arbmusic-7371.zai-ai.site/app/?shell=5';
+const REMOTE_URL = 'https://arbmusic-7371.zai-ai.site/app/?shell=6';
 const FALLBACK_URL = 'https://arbuzikyt99.github.io/';
 const LOCAL_FILE = path.join(__dirname, '..', 'www', 'index.html');
 
@@ -56,10 +56,19 @@ function setupUpdater() {
     send('updater', { event: 'update-available', version: info.version });
   });
   autoUpdater.on('download-progress', (p) => {
-    send('updater', { event: 'download-progress', percent: Math.round(p.percent) });
+    send('updater', {
+      event: 'download-progress',
+      percent: Math.round(p.percent),
+      transferredMB: p.transferred / 1048576,
+      totalMB: p.total / 1048576,
+      speedMBps: p.bytesPerSecond / 1048576,
+    });
   });
   autoUpdater.on('update-downloaded', (info) => {
     send('updater', { event: 'update-downloaded', version: info.version });
+  });
+  autoUpdater.on('update-not-available', (info) => {
+    send('updater', { event: 'update-not-available', version: info.version });
   });
   autoUpdater.on('update-not-available', (info) => {
     send('updater', { event: 'update-not-available', version: info.version });
@@ -82,6 +91,7 @@ ipcMain.on('updater-download', () => {
   autoUpdater.downloadUpdate().catch(() => {});
 });
 ipcMain.on('updater-install', () => {
+  try { app.releaseSingleInstanceLock(); } catch (_) {}
   autoUpdater.quitAndInstall(false, true);
 });
 ipcMain.on('app-version', (e) => {
