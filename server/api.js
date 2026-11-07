@@ -228,6 +228,7 @@ async function restoreFromMirror() {
 }
 const users = () => readJSON('users.json', {});
 const queue = () => readJSON('queue.json', { items: [] });
+const playsDb = () => readJSON('plays.json', {});
 
 /* ---------- auth ---------- */
 const b64u = b => Buffer.from(b).toString('base64url');
@@ -320,6 +321,56 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return json(res, 204, {});
 
   try {
+    /* --- подсчёт прослушиваний трека --- */
+    if (p === '/api/play' && req.method === 'POST') {
+      const body = JSON.parse((await readBody(req, 1e6)).toString('utf8') || '{}');
+      const file = String(body.file || '').replace(/[^a-zA-Z0-9а-яА-ЯёЁ _\-.]/g, '').slice(0, 200);
+      if (file) {
+        const db = playsDb();
+        const rec = db[file] || { plays: 0 };
+        rec.plays = (rec.plays || 0) + 1;
+        rec.lastAt = Date.now();
+        db[file] = rec;
+        writeJSON('plays.json', db);
+      }
+      return json(res, 200, { ok: true });
+    }
+
+    /* --- ArbStudio: аналитика и треки автора --- */
+    if (p === '/api/studio' && req.method === 'GET') {
+      const me = checkToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+      if (!me) return json(res, 401, { error: 'Войди в аккаунт' });
+      const user = me.name;
+      // каталог из репозитория (кэш 60с)
+      let catalog = { tracks: [] };
+      try {
+        if (GH_TOKEN && Date.now() - catCacheAt > 60000) {
+          const cur = await ghApi(`/repos/${GH_MIRROR_REPO}/contents/catalog.json`);
+          catCache = JSON.parse(Buffer.from(cur.content, 'base64').toString('utf8'));
+          catCacheAt = Date.now();
+        }
+      } catch (_) { /* ignore */ }
+      if (!catCache) { try { catCache = JSON.parse(fs.readFileSync(path.join(DATA, 'catalog-cache.json'), 'utf8')); } catch (_) {} }
+      else { try { fs.writeFileSync(path.join(DATA, 'catalog-cache.json'), JSON.stringify(catCache)); } catch (_) {} }
+      const catalogTracks = (catCache && catCache.tracks) || [];
+      const plays = playsDb();
+      const published = catalogTracks
+        .filter(t => t.by === user)
+        .map(t => ({ file: t.file, title: t.title, artist: t.artist, plays: (plays[t.file] || { plays: 0 }).plays }));
+      const pending = queue().items.filter(i => i.by === user).map(i => ({
+        id: i.id, title: i.title, artist: i.artist, at: i.at, coverExt: i.coverExt || null,
+      }));
+      published.sort((a, b) => b.plays - a.plays);
+      return json(res, 200, {
+        totals: {
+          plays: published.reduce((s, t) => s + t.plays, 0),
+          published: published.length,
+          pending: pending.length,
+        },
+        published, pending,
+      });
+    }
+
     /* --- каталог для приложения (без лимитов GitHub) --- */
     if (p === '/api/catalog' && req.method === 'GET') {
       let data = null;
