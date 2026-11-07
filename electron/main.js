@@ -10,7 +10,7 @@ const { app, BrowserWindow, shell, net, ipcMain } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
-const REMOTE_URL = 'https://arbmusic-7371.zai-ai.site/app/?shell=6';
+const REMOTE_URL = 'https://arbmusic-7371.zai-ai.site/app/?shell=7';
 const FALLBACK_URL = 'https://arbuzikyt99.github.io/';
 const LOCAL_FILE = path.join(__dirname, '..', 'www', 'index.html');
 
@@ -70,14 +70,10 @@ function setupUpdater() {
   autoUpdater.on('update-not-available', (info) => {
     send('updater', { event: 'update-not-available', version: info.version });
   });
-  autoUpdater.on('update-not-available', (info) => {
-    send('updater', { event: 'update-not-available', version: info.version });
-  });
   autoUpdater.on('error', (e) => {
     send('updater', { event: 'error', message: String(e && e.message || e).slice(0, 140) });
   });
-  // тихая проверка при старте
-  autoUpdater.checkForUpdates().catch(() => {});
+  // автопроверки при старте НЕТ — проверка только по кнопке в профиле
 }
 
 function send(channel, data) {
